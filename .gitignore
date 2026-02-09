@@ -1,0 +1,16 @@
+# secrets
+.env
+.env.*
+!.env.example
+# build / deps
+node_modules/
+dist/
+out/
+*.vsix
+.vscode-test/
+coverage/
+# local spike scratch output
+spikes/**/output/
+
+# test fixture: proves excluded folders are skipped
+!fixtures/workspaces/demo/node_modules/
