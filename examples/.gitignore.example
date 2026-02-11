@@ -1,0 +1,7 @@
+# Keep figma.design.yaml committed. FigBridge writes nothing else into the repository:
+# previews live in VS Code extension storage and Claude events in a per-user state folder.
+
+# Environment files can hold unrelated application secrets (and must never hold a Figma token).
+.env
+.env.local
+.env.*.local

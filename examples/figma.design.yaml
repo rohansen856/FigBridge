@@ -1,0 +1,39 @@
+# FigBridge manifest example (schemaVersion 1).
+# This is example data, not a real Figma mapping. Replace values before use.
+# Never place a Figma PAT, OAuth token, cookie, or signed render URL in this file.
+
+schemaVersion: 1
+project:
+  name: example-app
+
+settings:
+  preview:
+    format: png
+    scale: 1
+    ttlMinutes: 1440
+    hoverWidth: 360
+  scan:
+    include:
+      - "**/*.{ts,tsx,js,jsx,dart}"   # full syntax support
+      - "**/*.{py,rs,go}"             # comment-level (file) support only
+    exclude:                          # added to built-in excludes (node_modules, build, dist, .dart_tool, …)
+      - "**/generated/**"
+
+files:
+  app:
+    name: Main application design
+    url: "${env:FIGMA_FILE_URL}"
+
+refs:
+  F7KQ9M2X4P6D:
+    file: app
+    nodeId: "0:1"
+    name: Checkout screen
+    kind: screen
+    tags: [checkout, mobile]
+  8J3TD9PH6Q2W:
+    file: app
+    nodeId: "12:34"
+    name: Checkout summary card
+    kind: component
+    parentRef: F7KQ9M2X4P6D
