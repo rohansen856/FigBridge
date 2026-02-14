@@ -1,0 +1,45 @@
+# FigBridge demo manifest — real nodes in the "Food Couriers" test file.
+schemaVersion: 1
+project:
+  name: food-couriers-demo
+
+files:
+  app:
+    name: Food Couriers app
+    url: "${env:FIGMA_FILE_URL}"
+
+refs:
+  F7KQ9M2X4P6D:
+    file: app
+    nodeId: "1:666"
+    name: Order details
+    kind: screen
+    tags: [checkout]
+  8J3TD9PH6Q2W:
+    file: app
+    nodeId: "1:667"
+    name: Order details background pattern
+    kind: component
+    parentRef: F7KQ9M2X4P6D
+  H2C4N6P8R0T2:
+    file: app
+    nodeId: "1:625"
+    name: Detail menu
+    kind: screen
+    tags: [menu]
+  K4M6P8R0T2V4:
+    file: app
+    nodeId: "1:5963"
+    name: Set location
+    kind: screen
+  W2X4Y6Z8A0B2:
+    file: app
+    nodeId: "999:999"
+    name: Deleted frame (fixture for NODE_NOT_FOUND)
+    kind: screen
+  Q1R2S3T4V5W6:
+    file: app
+    nodeId: "1:81"
+    name: Splash (unused in code)
+    kind: screen
+retired: [RETRD0000001]
