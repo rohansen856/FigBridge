@@ -1,0 +1,18 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/home/user/.claude/projects/example/00000000-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/home/user/project",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__plugin_figma_figma__use_figma",
+  "tool_input": {
+    "fileKey": "aHvbMOTkjQ3dmWBoWbMuv2",
+    "description": "Update card title",
+    "code": "/* script body removed from fixture */"
+  },
+  "tool_response": [
+    { "type": "text", "text": "{\"mutatedNodeIds\":[\"1:666\"],\"createdNodeIds\":[]}" }
+  ],
+  "tool_use_id": "toolu_fixture_0003",
+  "duration_ms": 2210
+}

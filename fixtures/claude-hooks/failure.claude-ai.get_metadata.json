@@ -1,0 +1,16 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/home/user/.claude/projects/example/00000000-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/home/user/project",
+  "prompt_id": "00000000-0000-4000-8000-000000000002",
+  "permission_mode": "default",
+  "effort": "medium",
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "mcp__claude_ai_Figma__get_metadata",
+  "tool_input": { "fileKey": "aHvbMOTkjQ3dmWBoWbMuv2", "nodeId": "1:666" },
+  "tool_use_id": "toolu_fixture_0001",
+  "error": "Looks like you don't have edit access to this file. The file owner can share it with you and make you an editor. For more details on rate limits and access, refer to https://developers.figma.com/docs/figma-mcp-server/rate-limits-access/\nFigma Debug UUID: 00000000-0000-4000-8000-000000000003",
+  "is_interrupt": false,
+  "duration_ms": 412,
+  "mcp_server": { "name": "claude.ai Figma", "source": "claudeai" }
+}
