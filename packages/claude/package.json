@@ -1,0 +1,22 @@
+{
+  "name": "@figbridge/claude",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": { "./package.json": "./package.json" },
+  "bin": {
+    "figbridge-claude": "./dist/figbridge-claude.mjs"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@figbridge/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "tinyglobby": "^0.2.17",
+    "zod": "^4.6.5"
+  }
+}
