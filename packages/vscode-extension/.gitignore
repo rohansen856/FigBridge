@@ -1,0 +1,5 @@
+claude-marketplace/
+schemas/
+out/
+THIRD_PARTY_NOTICES.md
+*.vsix

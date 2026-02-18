@@ -1,0 +1,437 @@
+{
+  "name": "figbridge",
+  "displayName": "FigBridge",
+  "description": "Link source code to exact Figma nodes with short @figma IDs: hover previews, navigation, mapping health and Claude Code integration.",
+  "version": "0.1.0",
+  "publisher": "figbridge",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "figma",
+    "design",
+    "flutter",
+    "react",
+    "claude"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/figma.design.yaml",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:dart"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In untrusted workspaces FigBridge only scans annotations locally. It does not contact Figma, read .env files or process Claude Code events."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "figbridge",
+          "title": "FigBridge",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "figbridge": [
+        {
+          "id": "figbridge.overview",
+          "name": "Overview"
+        },
+        {
+          "id": "figbridge.references",
+          "name": "References"
+        },
+        {
+          "id": "figbridge.problems",
+          "name": "Problems"
+        },
+        {
+          "id": "figbridge.activity",
+          "name": "Claude Activity",
+          "when": "figbridge.activityVisible"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "figbridge.overview",
+        "contents": "No figma.design.yaml manifest was found in this workspace.\n[Create Manifest](command:figbridge.createManifest)\nLearn more in the [README](https://github.com/figbridge/figbridge#readme).",
+        "when": "figbridge.state == 'no-manifest'"
+      }
+    ],
+    "commands": [
+      {
+        "command": "figbridge.open",
+        "title": "Open in Figma",
+        "category": "FigBridge",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "figbridge.preview",
+        "title": "Preview Design",
+        "category": "FigBridge",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "figbridge.refresh",
+        "title": "Refresh Preview",
+        "category": "FigBridge",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "figbridge.refreshFile",
+        "title": "Refresh Previews for Figma File",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.refreshAll",
+        "title": "Refresh All Cached Previews",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.validateMappings",
+        "title": "Validate Mappings Against Figma",
+        "category": "FigBridge",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "figbridge.rescan",
+        "title": "Rescan Workspace",
+        "category": "FigBridge",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "figbridge.setToken",
+        "title": "Set Figma Access Token",
+        "category": "FigBridge",
+        "icon": "$(key)"
+      },
+      {
+        "command": "figbridge.forgetToken",
+        "title": "Forget Figma Access Token",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.insertReference",
+        "title": "Insert Figma Reference\u2026",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.createMapping",
+        "title": "Create Mapping for Reference\u2026",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.retargetMapping",
+        "title": "Retarget Mapping\u2026",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.retireMapping",
+        "title": "Retire Mapping\u2026",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.copyAnnotation",
+        "title": "Copy Annotation",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.copyFigmaUrl",
+        "title": "Copy Figma URL",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.findReference",
+        "title": "Find Reference\u2026",
+        "category": "FigBridge",
+        "icon": "$(search)"
+      },
+      {
+        "command": "figbridge.groupByFile",
+        "title": "Group by Figma File",
+        "category": "FigBridge",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "figbridge.groupBySource",
+        "title": "Group by Source Hierarchy",
+        "category": "FigBridge",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "figbridge.openManifest",
+        "title": "Open Manifest",
+        "category": "FigBridge",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "figbridge.createManifest",
+        "title": "Create Manifest",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.clearCache",
+        "title": "Clear Preview Cache",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.clearActivity",
+        "title": "Clear Claude Activity",
+        "category": "FigBridge",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "figbridge.setupClaude",
+        "title": "Set Up Claude Code Integration\u2026",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.cleanAllData",
+        "title": "Delete All Local FigBridge Data\u2026",
+        "category": "FigBridge"
+      },
+      {
+        "command": "figbridge.revealInManifest",
+        "title": "Show in Manifest",
+        "category": "FigBridge"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "figbridge.groupByFile",
+          "when": "false"
+        },
+        {
+          "command": "figbridge.groupBySource",
+          "when": "false"
+        },
+        {
+          "command": "figbridge.revealInManifest",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "figbridge.rescan",
+          "when": "view == figbridge.overview",
+          "group": "navigation@1"
+        },
+        {
+          "command": "figbridge.validateMappings",
+          "when": "view == figbridge.overview",
+          "group": "navigation@2"
+        },
+        {
+          "command": "figbridge.openManifest",
+          "when": "view == figbridge.overview",
+          "group": "navigation@3"
+        },
+        {
+          "command": "figbridge.findReference",
+          "when": "view == figbridge.references",
+          "group": "navigation@1"
+        },
+        {
+          "command": "figbridge.groupBySource",
+          "when": "view == figbridge.references && figbridge.groupBy == 'file'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "figbridge.groupByFile",
+          "when": "view == figbridge.references && figbridge.groupBy == 'source'",
+          "group": "navigation@2"
+        },
+        {
+          "command": "figbridge.clearActivity",
+          "when": "view == figbridge.activity",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "figbridge.open",
+          "when": "viewItem =~ /ref/",
+          "group": "inline@1"
+        },
+        {
+          "command": "figbridge.preview",
+          "when": "viewItem =~ /ref/",
+          "group": "inline@2"
+        },
+        {
+          "command": "figbridge.open",
+          "when": "viewItem =~ /ref/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "figbridge.preview",
+          "when": "viewItem =~ /ref/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "figbridge.refresh",
+          "when": "viewItem =~ /ref/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "figbridge.copyAnnotation",
+          "when": "viewItem =~ /ref/",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "figbridge.copyFigmaUrl",
+          "when": "viewItem =~ /ref/",
+          "group": "2_copy@2"
+        },
+        {
+          "command": "figbridge.retargetMapping",
+          "when": "viewItem =~ /mapped/",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "figbridge.retireMapping",
+          "when": "viewItem =~ /mapped/",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "figbridge.createMapping",
+          "when": "viewItem =~ /unresolved/",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "figbridge.refreshFile",
+          "when": "viewItem == figmaFile",
+          "group": "1_open@1"
+        },
+        {
+          "command": "figbridge.revealInManifest",
+          "when": "viewItem =~ /mapped/",
+          "group": "3_edit@0"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "figbridge.open",
+          "when": "activeWebviewPanelId == figbridge.preview",
+          "group": "navigation@1"
+        },
+        {
+          "command": "figbridge.refresh",
+          "when": "activeWebviewPanelId == figbridge.preview",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "FigBridge",
+      "properties": {
+        "figbridge.manifestPath": {
+          "type": "string",
+          "default": "figma.design.yaml",
+          "scope": "resource",
+          "description": "Path of the manifest relative to the workspace folder."
+        },
+        "figbridge.hover.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show design previews when hovering @figma references."
+        },
+        "figbridge.hover.waitMs": {
+          "type": "integer",
+          "default": 1500,
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "How long a hover waits for an uncached render before showing a loading message (renders often take 5\u201310 s)."
+        },
+        "figbridge.preview.renderOnHover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Render uncached previews automatically on hover. Turn off on Figma plans with small API quotas (Starter / View seats); previews then render only via Preview or Refresh."
+        },
+        "figbridge.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Open/Preview links above annotated declarations."
+        },
+        "figbridge.preview.persist": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep rendered previews on disk (extension storage, never in the repository). Turn off for sensitive designs to keep them in memory only."
+        },
+        "figbridge.cache.maxMB": {
+          "type": "integer",
+          "default": 250,
+          "minimum": 10,
+          "maximum": 4096,
+          "description": "Maximum disk space for cached previews."
+        },
+        "figbridge.openWith": {
+          "type": "string",
+          "enum": [
+            "browser",
+            "figmaExtension"
+          ],
+          "enumDescriptions": [
+            "Open the node URL in your default browser (or the Figma desktop app if it handles figma.com links).",
+            "Experimental: ask the Figma for VS Code extension to open the file through its undocumented URI handler; falls back to the browser."
+          ],
+          "default": "browser",
+          "description": "How \"Open in Figma\" opens a design."
+        },
+        "figbridge.claude.recordReads": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also list Figma MCP read operations (not only edits) in Claude Activity."
+        }
+      }
+    },
+    "yamlValidation": [
+      {
+        "fileMatch": "figma.design.yaml",
+        "url": "./schemas/figma.design.schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "node esbuild.mjs && tsc -p tsconfig.test.json && vscode-test",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies --out figbridge.vsix"
+  },
+  "dependencies": {
+    "@figbridge/core": "workspace:*",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/vscode": "~1.95.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
+    "@figbridge/claude": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/figbridge/figbridge"
+  }
+}

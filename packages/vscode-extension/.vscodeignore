@@ -1,0 +1,11 @@
+**
+!dist/extension.js
+!dist/wasm/**
+!schemas/**
+!media/**
+!claude-marketplace/**
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+!THIRD_PARTY_NOTICES.md
