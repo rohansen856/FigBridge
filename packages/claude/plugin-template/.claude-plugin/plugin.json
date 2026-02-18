@@ -1,0 +1,8 @@
+{
+  "name": "figbridge",
+  "version": "0.1.0",
+  "description": "Resolve @figma reference IDs in source comments to exact Figma nodes (read-only MCP), and notify the FigBridge VS Code extension after Figma MCP edits so design previews are refreshed.",
+  "author": { "name": "FigBridge" },
+  "license": "MIT",
+  "keywords": ["figma", "design", "vscode"]
+}

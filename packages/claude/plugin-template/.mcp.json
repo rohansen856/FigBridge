@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "figbridge": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/figbridge-claude.mjs", "mcp"]
+    }
+  }
+}

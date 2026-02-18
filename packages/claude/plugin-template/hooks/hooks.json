@@ -1,0 +1,17 @@
+{
+  "description": "Records sanitised Figma MCP tool outcomes (tool name, file key, node IDs, success or failure) for the FigBridge VS Code extension. Never blocks or changes tool results.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*[Ff][Ii][Gg][Mm][Aa].*__.*",
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/figbridge-claude.mjs\" hook", "async": true, "timeout": 10 }]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__.*[Ff][Ii][Gg][Mm][Aa].*__.*",
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/figbridge-claude.mjs\" hook", "async": true, "timeout": 10 }]
+      }
+    ]
+  }
+}
