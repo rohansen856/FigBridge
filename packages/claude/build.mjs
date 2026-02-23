@@ -56,7 +56,7 @@ writeFileSync(
   ) + '\n',
 );
 writeNotices(result.metafile, join(pluginDir, 'THIRD_PARTY_NOTICES.md'), [
-  { name: 'tree-sitter-dart (grammar, compiled to WASM)', version: '1.0.0', license: 'MIT', dir: join(coreDir, 'wasm'), licenseFile: 'tree-sitter-dart.LICENSE' },
+  { name: 'tree-sitter-dart (grammar, compiled to WASM)', version: 'be07cf7', license: 'MIT', dir: join(coreDir, 'wasm'), licenseFile: 'tree-sitter-dart.LICENSE' },
   { name: '@vscode/tree-sitter-wasm (TypeScript/TSX/JavaScript grammars)', version: '0.3.1', license: 'MIT', dir: dirname(coreRequire.resolve('@vscode/tree-sitter-wasm/package.json')) },
 ]);
 console.log(`built ${out}/ (plugin ${pkg.version})`);

@@ -50,7 +50,7 @@ if (watch) {
 } else {
   const result = await build(options);
   const coreDir = dirname(require.resolve('@figbridge/core/package.json'));
-  const dart = { name: 'tree-sitter-dart (grammar, compiled to WASM)', version: '1.0.0', license: 'MIT', dir: join(coreDir, 'wasm'), licenseFile: 'tree-sitter-dart.LICENSE' };
+  const dart = { name: 'tree-sitter-dart (grammar, compiled to WASM)', version: 'be07cf7', license: 'MIT', dir: join(coreDir, 'wasm'), licenseFile: 'tree-sitter-dart.LICENSE' };
   const vsWasm = createRequire(join(coreDir, 'package.json')).resolve('@vscode/tree-sitter-wasm/package.json');
   const grammars = { name: '@vscode/tree-sitter-wasm (TypeScript/TSX/JavaScript grammars)', version: '0.3.1', license: 'MIT', dir: dirname(vsWasm) };
   writeNotices(result.metafile, 'THIRD_PARTY_NOTICES.md', [dart, grammars]);
