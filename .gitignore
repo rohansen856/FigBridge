@@ -14,3 +14,6 @@ spikes/**/output/
 
 # test fixture: proves excluded folders are skipped
 !fixtures/workspaces/demo/node_modules/
+
+# Example apps are local-only (not part of the published repo)
+examples/
