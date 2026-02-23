@@ -1,7 +1,7 @@
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/out/**', '**/node_modules/**', '**/marketplace/**', '**/claude-marketplace/**', 'spikes/**', 'fixtures/**', '**/*.mjs'] },
+  { ignores: ['**/dist/**', '**/out/**', '**/node_modules/**', '**/marketplace/**', '**/claude-marketplace/**', 'spikes/**', 'fixtures/**', 'examples/**', '**/*.mjs'] },
   ...tseslint.configs.recommended,
   {
     rules: {
