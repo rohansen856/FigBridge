@@ -16,11 +16,11 @@ export type DirectiveMatch =
   | { kind: 'malformed'; directiveStart: number; end: number; token: string; suggestion?: string };
 
 /**
- * `@figma` must stand alone: not preceded by a word character, `@`, `.` or `-` (so emails such
- * as `x@figma.com` don't match) and not followed by a word character or `-` (so `@figma-ref`
- * and `@figmaX` don't match).
+ * `@figma` must stand alone: not preceded by a word character, `@`, `.`, `-` or a backtick (so
+ * emails such as `x@figma.com` and quoted mentions don't match) and followed by a space, tab or
+ * the end of the comment (so `@figma-ref`, `@figmaX` and `` `@figma` `` in prose don't match).
  */
-const DIRECTIVE_PATTERN = /(?<![\w@.\-])@figma(?![\w-])/g;
+const DIRECTIVE_PATTERN = /(?<![\w@.\-`])@figma(?=[ \t]|\s*(?:\*\/)?$)/gm;
 const ID_TOKEN = /^[ \t]+([^\s*/,;:)}\]]+)/;
 
 /** Finds `@figma <ID>` directives in the text of a single comment. */
