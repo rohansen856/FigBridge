@@ -40,6 +40,23 @@ describe('Dart adapter', () => {
     ]);
   });
 
+  it('handles Dart 3 records/patterns and names call-expression usages', () => {
+    const text = [
+      'class A extends StatelessWidget {',
+      '  static const _items = [(\'x\', 1.0), (\'y\', 2.0)];',
+      '  Widget build(BuildContext c) => Column(children: [',
+      '    for (final (label, size) in _items) Text(label),',
+      '    // @figma 8J3TD9PH6Q2W',
+      '    QuantityStepper(value: 1),',
+      '    ErrorBuilder((_, _, _) => const SizedBox()),',
+      '  ]);',
+      '}',
+    ].join('\n');
+    const r = scanner.scan({ relPath: 'lib/a.dart', text: `/// @figma F7KQ9M2X4P6D\n${text}` });
+    expect(r.hasSyntaxErrors).toBe(false);
+    expect(r.occurrences.map((o) => `${o.refId}:${o.attachment}:${o.owner?.name}`)).toEqual(['F7KQ9M2X4P6D:declaration:A', '8J3TD9PH6Q2W:usage:QuantityStepper']);
+  });
+
   it('includes the function body in a signature owner range', () => {
     const priceTag = scanFixture('widgets.dart').occurrences.find((o) => o.rawId === 'K4M6P8R0T2V4')!;
     expect(priceTag.owner!.range.start.line).toBe(38); // zero-based: `Widget priceTag(...)` is line 39
@@ -92,6 +109,17 @@ describe('adversarial inputs', () => {
   ];
   it.each(cases)('%s: %j has no occurrences', (relPath, text) => {
     expect(scanner.scan({ relPath, text }).occurrences).toEqual([]);
+  });
+
+  it('ignores @figma mentioned in prose', () => {
+    const r = scanner.scan({ relPath: 'a.dart', text: '/// Every screen carries a `@figma` reference (see @figma: docs).\nclass A {}' });
+    expect(r.occurrences).toEqual([]);
+    expect(r.diagnostics).toEqual([]);
+  });
+
+  it('still reports a directive with a missing or bad ID', () => {
+    const r = scanner.scan({ relPath: 'a.ts', text: '// @figma\n/* @figma */\n// @figma 12345\nconst x = 1;' });
+    expect(r.diagnostics.map((d) => d.code)).toEqual(['MALFORMED_DIRECTIVE', 'MALFORMED_DIRECTIVE', 'MALFORMED_DIRECTIVE']);
   });
 
   it('finds several directives in one comment', () => {
