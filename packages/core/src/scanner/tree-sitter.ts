@@ -332,6 +332,8 @@ const NAME_TYPES = new Set(['identifier', 'type_identifier', 'property_identifie
  */
 function nameOf(node: Node): string | undefined {
   let firstIdentifier: string | undefined;
+  // A bare identifier (e.g. a Dart call `QuantityStepper(...)`, where the arguments are a sibling).
+  if (NAME_TYPES.has(node.type)) return node.text;
   const queue: Array<[Node, number]> = [[node, 0]];
   while (queue.length) {
     const [n, depth] = queue.shift()!;
