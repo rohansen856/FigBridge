@@ -1,5 +1,6 @@
 import type { RefId } from '../ids.js';
-import { buildNodeUrl } from '../figma-url.js';
+import { buildFileUrl, buildNodeUrl } from '../figma-url.js';
+import { isLinkKey, parseLinkKey } from '../scanner/grammar.js';
 import type { Diagnostic, ErrorCode, Severity } from '../diagnostics.js';
 import type { Manifest, ManifestFile, ManifestRef } from '../manifest/types.js';
 import { rangeContains, type AnnotationOccurrence, type FileScanResult } from '../scanner/types.js';
@@ -148,6 +149,7 @@ export class ReferenceIndex {
   // ---- queries ----
 
   resolve(refId: RefId): ResolvedRef | undefined {
+    if (isLinkKey(refId)) return this.resolveLink(refId);
     const ref = this.manifest?.refs.get(refId);
     if (!ref) return undefined;
     const file = this.manifest!.files.get(ref.file);
@@ -155,6 +157,35 @@ export class ReferenceIndex {
     const openUrl =
       file.state === 'ok' && file.fileKey ? buildNodeUrl(file as { fileKey: string; branchKey?: string; slug?: string }, ref.nodeId) : undefined;
     return { ref, file, nodeState: this.nodeStates.get(refId) ?? 'unknown', ...(openUrl ? { openUrl } : {}) };
+  }
+
+  /**
+   * A link annotation needs no manifest entry. When the manifest maps the same node, its name,
+   * kind and tags are reused; the file comes from the manifest when its key matches.
+   */
+  private resolveLink(key: RefId): ResolvedRef | undefined {
+    const target = parseLinkKey(key);
+    const link = this.byRef.get(key)?.find((o) => o.link)?.link;
+    if (!target) return undefined;
+    const m = this.manifest;
+    const file =
+      [...(m?.files.values() ?? [])].find((f) => f.apiKey === target.apiKey) ??
+      ({
+        alias: link?.slug ? decodeURIComponent(link.slug).slice(0, 40) : 'figma',
+        name: link?.slug ? decodeURIComponent(link.slug).replace(/-+/g, ' ').trim() : undefined,
+        fileKey: link?.fileKey ?? target.apiKey,
+        ...(link?.branchKey ? { branchKey: link.branchKey } : {}),
+        ...(link?.slug ? { slug: link.slug } : {}),
+        apiKey: target.apiKey,
+        baseUrl: buildFileUrl({ fileKey: link?.fileKey ?? target.apiKey, ...(link?.branchKey ? { branchKey: link.branchKey } : {}), ...(link?.slug ? { slug: link.slug } : {}) }),
+        state: 'ok',
+      } as ManifestFile);
+    const mapped = [...(m?.refs.values() ?? [])].find((r) => r.nodeId === target.nodeId && m!.files.get(r.file)?.apiKey === target.apiKey);
+    const ref: ManifestRef = mapped
+      ? { ...mapped, id: key }
+      : { id: key, file: file.alias, nodeId: target.nodeId, tags: [], deprecated: false };
+    const openUrl = buildNodeUrl(file as { fileKey: string; branchKey?: string; slug?: string }, target.nodeId);
+    return { ref, file, nodeState: this.nodeStates.get(key) ?? (mapped ? this.nodeStates.get(mapped.id) : undefined) ?? 'unknown', openUrl };
   }
 
   occurrencesFor(refId: RefId): readonly AnnotationOccurrence[] {
@@ -176,8 +207,12 @@ export class ReferenceIndex {
     return inFile.find((o) => rangeContains(o.idRange, pos)) ?? inFile.find((o) => rangeContains(o.commentRange, pos) && o.commentRange.start.line === line);
   }
 
+  /** True when an ID annotation uses the mapping, or a link annotation points at its node. */
   isUsed(refId: RefId): boolean {
-    return (this.byRef.get(refId)?.length ?? 0) > 0;
+    if ((this.byRef.get(refId)?.length ?? 0) > 0) return true;
+    const ref = this.manifest?.refs.get(refId);
+    const apiKey = ref ? this.manifest!.files.get(ref.file)?.apiKey : undefined;
+    return !!apiKey && (this.byRef.get(`link:${apiKey}/${ref!.nodeId}` as RefId)?.length ?? 0) > 0;
   }
 
   /** Diagnostics to show in a source file: scan diagnostics plus resolution problems. */
@@ -187,6 +222,7 @@ export class ReferenceIndex {
     const out = [...result.diagnostics];
     if (!this.manifest) return out;
     for (const o of result.occurrences) {
+      if (o.link) continue; // links resolve without the manifest
       const ref = this.manifest.refs.get(o.refId);
       if (!o.canonical)
         out.push({
@@ -224,7 +260,7 @@ export class ReferenceIndex {
   health(): HealthSummary {
     const occurrences = this.allOccurrences();
     const refs = this.manifest?.refs;
-    const resolved = refs ? occurrences.filter((o) => refs.has(o.refId)).length : 0;
+    const resolved = occurrences.filter((o) => o.link || refs?.has(o.refId)).length;
     const files = [...(this.manifest?.files.values() ?? [])];
     return {
       scanState: this.scanState,
@@ -256,6 +292,7 @@ export class ReferenceIndex {
       for (const o of f.occurrences) {
         const loc = { refId: o.refId, relPath: o.relPath, line: o.idRange.start.line };
         if (!o.canonical) out.push({ kind: 'noncanonical', code: 'NONCANONICAL_CASE', severity: 'warning', message: `${o.rawId} should be written ${o.refId}.`, ...loc });
+        if (o.link) continue;
         if (m && !m.refs.has(o.refId))
           out.push({ kind: 'unresolved', code: 'UNRESOLVED_REF', severity: 'warning', message: `${o.refId} is not in the manifest.`, ...loc });
         else if (m?.refs.get(o.refId)?.deprecated)
