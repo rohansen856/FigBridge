@@ -210,6 +210,7 @@ class TreeSitterAdapter implements LanguageAdapter {
             rawId: m.rawId,
             refId: m.refId,
             canonical: m.canonical,
+            ...(m.link ? { link: m.link } : {}),
             commentRange,
             idRange: lines.range(idStart, comment.startIndex + m.idEnd),
             languageId: result.languageId,
@@ -331,9 +332,9 @@ const NAME_TYPES = new Set(['identifier', 'type_identifier', 'property_identifie
  * method's name wins over its return type), else the first identifier within 3 levels.
  */
 function nameOf(node: Node): string | undefined {
-  let firstIdentifier: string | undefined;
   // A bare identifier (e.g. a Dart call `QuantityStepper(...)`, where the arguments are a sibling).
   if (NAME_TYPES.has(node.type)) return node.text;
+  let firstIdentifier: string | undefined;
   const queue: Array<[Node, number]> = [[node, 0]];
   while (queue.length) {
     const [n, depth] = queue.shift()!;
@@ -379,9 +380,11 @@ export function malformedDiagnostic(
   relPath: string,
   lines: LineIndex,
   base: number,
-  m: { directiveStart: number; end: number; token: string; suggestion?: string },
+  m: { directiveStart: number; end: number; token: string; suggestion?: string; reason?: string },
 ): Diagnostic {
-  const message = m.token
+  const message = m.reason
+    ? m.reason
+    : m.token
     ? `"${m.token}" is not a valid FigBridge reference ID (12 characters from 0-9 and A-Z except I, L, O, U).` +
       (m.suggestion ? ` Did you mean ${m.suggestion}?` : '')
     : '@figma must be followed by a reference ID.';

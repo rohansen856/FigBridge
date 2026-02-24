@@ -1,5 +1,6 @@
 import type { RefId } from '../ids.js';
 import type { Diagnostic, Position, Range } from '../diagnostics.js';
+import type { LinkTarget } from './grammar.js';
 
 export interface SourceDocument {
   /** Workspace-relative POSIX path. */
@@ -30,8 +31,10 @@ export interface AnnotationOccurrence {
   id: string;
   relPath: string;
   rawId: string;
-  /** Canonical (upper-case) ID; set even when the ID is not in the manifest. */
+  /** Canonical (upper-case) ID, or a `link:` key for link annotations; set even when unmapped. */
   refId: RefId;
+  /** Present when the annotation is a Figma URL instead of an opaque ID. */
+  link?: LinkTarget;
   canonical: boolean;
   /** Range of the whole comment containing the directive. */
   commentRange: Range;

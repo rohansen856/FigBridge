@@ -56,6 +56,7 @@ export class FallbackAdapter implements LanguageAdapter {
           rawId: m.rawId,
           refId: m.refId,
           canonical: m.canonical,
+          ...(m.link ? { link: m.link } : {}),
           commentRange: lines.range(start, end),
           idRange: lines.range(start + m.idStart, start + m.idEnd),
           languageId: result.languageId,
