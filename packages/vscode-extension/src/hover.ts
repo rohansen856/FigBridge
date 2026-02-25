@@ -51,12 +51,13 @@ export class FigmaHoverProvider implements vscode.HoverProvider {
 
   private async resolvedMarkdown(located: Located, status: PreviewStatus | undefined, hasToken: boolean): Promise<vscode.MarkdownString> {
     const r = located.resolved!;
-    const manifest = located.project.manifest!;
+    const hoverWidth = located.project.manifest?.preview.hoverWidth ?? 360;
     const md = trusted(['figbridge.open', 'figbridge.preview', 'figbridge.refresh', 'figbridge.setToken', 'figbridge.copyFigmaUrl']);
-    const title = r.ref.name ?? r.ref.nodeId;
+    const title = r.ref.name ?? (located.occurrence?.link ? `Figma node ${r.ref.nodeId}` : r.ref.nodeId);
     md.appendMarkdown(`**${escapeMd(title)}**`);
     if (r.ref.kind) md.appendMarkdown(` · ${escapeMd(r.ref.kind)}`);
-    md.appendMarkdown(`  \n${escapeMd(r.file.name ?? r.file.alias)} · node \`${escapeMd(r.ref.nodeId)}\` · \`${escapeMd(r.ref.id)}\``);
+    const idLabel = located.occurrence?.link ? 'direct link' : `\`${escapeMd(r.ref.id)}\``;
+    md.appendMarkdown(`  \n${escapeMd(r.file.name ?? r.file.alias)} · node \`${escapeMd(r.ref.nodeId)}\` · ${idLabel}`);
     if (r.ref.deprecated) md.appendMarkdown(`  \n$(warning) Deprecated${r.ref.replacedBy ? ` — use \`${escapeMd(r.ref.replacedBy)}\`` : ''}`);
     md.appendMarkdown('\n\n');
 
@@ -65,7 +66,7 @@ export class FigmaHoverProvider implements vscode.HoverProvider {
     else if (!vscode.workspace.isTrusted) md.appendMarkdown('$(shield) Previews are disabled in untrusted workspaces.\n\n');
     else {
       // A cached image is shown even without a token (offline / token removed).
-      if (status && (hasToken || cached)) await this.appendPreview(md, located, status, manifest.preview.hoverWidth);
+      if (status && (hasToken || cached)) await this.appendPreview(md, located, status, hoverWidth);
       if (!hasToken) md.appendMarkdown(`$(key) ${commandLink('Set a Figma access token', 'figbridge.setToken', [])} to ${cached ? 'refresh' : 'see'} the preview.\n\n`);
     }
 

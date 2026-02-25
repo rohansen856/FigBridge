@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
   formatDirective,
   generateUniqueRefId,
+  isLinkKey,
   isRefId,
   MANIFEST_FILENAME,
   normalizeNodeId,
@@ -44,7 +45,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
   /** Resolves a command argument (ID string, tree node, or the annotation under the cursor). */
   function locate(arg: RefArg): Located | undefined {
     const id = typeof arg === 'string' ? arg : arg?.refId;
-    if (id && isRefId(id)) return ws.byRefId(id);
+    if (id && (isRefId(id) || isLinkKey(id))) return ws.byRefId(id as RefId);
     const editor = vscode.window.activeTextEditor;
     if (editor) return ws.locate(editor.document, editor.selection.active);
     if (panel.currentRef) return ws.byRefId(panel.currentRef);
@@ -132,6 +133,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     reg('figbridge.revealInManifest', async (arg: RefArg) => {
       const l = requireLocated(arg);
       const r = l.resolved?.ref.range;
+      if (!r && !l.project.manifest) throw new Error('This annotation links to Figma directly; it has no manifest entry.');
       await vscode.window.showTextDocument(l.project.manifestUri, r ? { selection: new vscode.Range(r.start.line, r.start.character, r.end.line, r.end.character) } : {});
     }),
 
@@ -140,7 +142,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     reg('figbridge.groupBySource', () => references.setGroupBy('source')),
 
     reg('figbridge.openManifest', async (folder?: vscode.Uri) => {
-      const project = folder ? ws.projects.get(folder.toString())?.project : ws.active()[0]?.project;
+      const project = folder ? ws.projects.get(folder.toString())?.project : ws.active().find((p) => p.project.manifest)?.project;
       if (!project) return vscode.commands.executeCommand('figbridge.createManifest');
       await vscode.window.showTextDocument(project.manifestUri);
     }),
@@ -239,7 +241,7 @@ async function pickProject(ws: FigBridgeWorkspace, uri?: vscode.Uri): Promise<Pr
   const candidates = ws.active().filter((p) => p.project.manifest);
   if (!candidates.length) throw new Error(`No valid ${MANIFEST_FILENAME} is loaded. Run "FigBridge: Create Manifest" first.`);
   if (candidates.length === 1) return candidates[0]!.project;
-  const pick = await vscode.window.showQuickPick(candidates.map((c) => ({ label: c.project.folder.name, project: c.project })), { title: 'Which project?' });
+  const pick = await vscode.window.showQuickPick(candidates.map((c) => ({ label: c.project.name, project: c.project })), { title: 'Which project?' });
   if (!pick) throw new CancelledError();
   return pick.project;
 }

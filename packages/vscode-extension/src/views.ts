@@ -114,7 +114,7 @@ export class OverviewProvider extends BaseProvider {
     const multi = projects.length > 1;
     const nodes = projects.flatMap(({ project }) => {
       const rows = this.projectRows(project);
-      return multi ? [new Group(item(project.folder.name, { expanded: true, iconPath: icon('root-folder') }), () => rows)] : rows;
+      return multi ? [new Group(item(project.name, { expanded: true, iconPath: icon('root-folder') }), () => rows)] : rows;
     });
     return nodes;
   }
@@ -131,7 +131,7 @@ export class OverviewProvider extends BaseProvider {
         item(manifestLabel, {
           description: project.state === 'invalid' && m ? 'using last valid version' : m?.path,
           iconPath: project.state === 'ok' ? icon('pass', 'testing.iconPassed') : icon('error', 'errorForeground'),
-          command: { command: 'figbridge.openManifest', title: 'Open manifest', arguments: [project.folder.uri] },
+          command: { command: 'figbridge.openManifest', title: 'Open manifest', arguments: [project.root] },
         }),
       ),
     );
@@ -208,7 +208,7 @@ export class ReferencesProvider extends BaseProvider {
     const multi = projects.length > 1;
     return projects.flatMap(({ project }) => {
       const rows = this.groupBy === 'file' ? this.byFile(project) : this.bySource(project);
-      return multi ? [new Group(item(project.folder.name, { expanded: true, iconPath: icon('root-folder') }), () => rows)] : rows;
+      return multi ? [new Group(item(project.name, { expanded: true, iconPath: icon('root-folder') }), () => rows)] : rows;
     });
   }
 
@@ -235,7 +235,15 @@ export class ReferencesProvider extends BaseProvider {
 
   private byFile(project: Project): Node[] {
     const m = project.manifest;
-    if (!m) return [];
+    const linked = project.index.allOccurrences().filter((o) => o.link);
+    const linkedGroup = linked.length
+      ? [
+          new Group(item('Linked directly', { expanded: !m, iconPath: icon('link'), description: String(linked.length), tooltip: '@figma annotations that use a Figma link instead of a manifest ID' }), () =>
+            linked.map((o) => occurrenceNode(project, o, project.index.resolve(o.refId)?.ref.name ?? `${o.owner?.name ?? 'node'} → ${o.link!.nodeId}`)),
+          ),
+        ]
+      : [];
+    if (!m) return linkedGroup;
     const files = [...m.files.values()];
     const groups: Node[] = files.map(
       (f) =>
@@ -247,7 +255,8 @@ export class ReferencesProvider extends BaseProvider {
             .map((r) => this.refNode(project, r)),
         ),
     );
-    const unresolved = project.index.allOccurrences().filter((o) => !m.refs.has(o.refId));
+    groups.push(...linkedGroup);
+    const unresolved = project.index.allOccurrences().filter((o) => !o.link && !m.refs.has(o.refId));
     if (unresolved.length)
       groups.push(
         new Group(item('Not in manifest', { collapsed: true, iconPath: icon('question'), description: String(unresolved.length) }), () =>
@@ -261,7 +270,7 @@ export class ReferencesProvider extends BaseProvider {
     const build = (n: SourceTreeNode): Node => {
       const o = n.occurrence;
       const ref = project.index.resolve(o.refId)?.ref;
-      const label = `${o.owner?.name ?? '(file)'} → ${ref?.name ?? o.refId}`;
+      const label = `${o.owner?.name ?? '(file)'} → ${ref?.name ?? (o.link ? `node ${o.link.nodeId}` : o.refId)}`;
       return occurrenceNode(project, o, label, () => n.children.map(build));
     };
     return project.index.sourceTree().map(build);
@@ -335,7 +344,7 @@ export class ProblemsProvider extends BaseProvider {
       ? { command: 'vscode.open', title: 'Go to source', arguments: [project.uriOf(p.relPath), { selection: new vscode.Range(p.line ?? 0, 0, p.line ?? 0, 0) }] }
       : p.refId
         ? { command: 'figbridge.revealInManifest', title: 'Show in manifest', arguments: [p.refId] }
-        : { command: 'figbridge.openManifest', title: 'Open manifest', arguments: [project.folder.uri] };
+        : { command: 'figbridge.openManifest', title: 'Open manifest', arguments: [project.root] };
     const n = new Leaf(
       item(p.refId ?? p.fileAlias ?? p.message, {
         description: p.relPath ? `${p.relPath}:${(p.line ?? 0) + 1}` : p.message,

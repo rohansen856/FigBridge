@@ -83,15 +83,16 @@ export class ProjectPreviews implements vscode.Disposable {
   }
 
   request(resolved: ResolvedRef): PreviewRequest | undefined {
-    const m = this.project.manifest;
-    if (!m || resolved.file.state !== 'ok' || !resolved.file.apiKey) return undefined;
+    if (resolved.file.state !== 'ok' || !resolved.file.apiKey) return undefined;
+    // Link annotations work without a manifest; use the manifest defaults then.
+    const preview = this.project.manifest?.preview ?? { format: 'png' as const, scale: 1, ttlMinutes: 1440, hoverWidth: 360 };
     return {
       apiKey: resolved.file.apiKey,
       nodeId: resolved.ref.nodeId,
-      format: m.preview.format,
-      scale: m.preview.scale,
+      format: preview.format,
+      scale: preview.scale,
       alias: resolved.file.alias,
-      ttlMinutes: m.preview.ttlMinutes,
+      ttlMinutes: preview.ttlMinutes,
     };
   }
 
