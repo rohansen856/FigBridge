@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 
 let api: any;
 const root = () => vscode.workspace.workspaceFolders![0]!.uri;
-const project = () => [...api.workspace.projects.values()][0].project;
+const project = () => api.workspace.forUri(vscode.Uri.joinPath(root(), 'figma.design.yaml')).project;
 
 async function until<T>(fn: () => T | undefined | false, ms = 15000): Promise<T> {
   const end = Date.now() + ms;
@@ -116,6 +116,34 @@ suite('FigBridge extension', () => {
     assert.ok(project().index.resolve('F7KQ9M2X4P6D'));
     await vscode.commands.executeCommand('undo');
     await until(() => project().state === 'ok');
+  });
+
+  test('a @figma link annotation resolves without an ID and reuses the mapped name', async () => {
+    const uri = vscode.Uri.joinPath(root(), 'web/src/Linked.tsx');
+    await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode('// @figma https://www.figma.com/design/aHvbMOTkjQ3dmWBoWbMuv2/Food?node-id=1-666&t=x\nexport const Linked = () => null;\n'));
+    await until(() => project().index.occurrencesIn('web/src/Linked.tsx').length === 1);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const text = hoverText(await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', doc.uri, new vscode.Position(0, 40)));
+    assert.match(text, /Order details/);
+    assert.match(text, /direct link/);
+    assert.strictEqual(vscode.languages.getDiagnostics(uri).length, 0);
+    await vscode.workspace.fs.delete(uri);
+  });
+
+  test('a nested figma.design.yaml becomes its own project', async () => {
+    const sub = vscode.Uri.joinPath(root(), 'packages/shop');
+    await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(sub, 'Card.tsx'), new TextEncoder().encode('// @figma 8J3TD9PH6Q2W\nexport const Card = () => null;\n'));
+    await vscode.workspace.fs.writeFile(
+      vscode.Uri.joinPath(sub, 'figma.design.yaml'),
+      new TextEncoder().encode('schemaVersion: 1\nfiles:\n  app: { fileKey: aHvbMOTkjQ3dmWBoWbMuv2 }\nrefs:\n  8J3TD9PH6Q2W: { file: app, nodeId: "1:667", name: Shop card }\n'),
+    );
+    const nested = await until(() => {
+      const p = api.workspace.forUri(vscode.Uri.joinPath(sub, 'Card.tsx'))?.project;
+      return p && p.root.toString() === sub.toString() && p.index.occurrencesIn('Card.tsx').length === 1 && p;
+    });
+    assert.strictEqual(nested.index.resolve('8J3TD9PH6Q2W').ref.name, 'Shop card');
+    await until(() => project().index.occurrencesIn('packages/shop/Card.tsx').length === 0);
+    await vscode.workspace.fs.delete(sub, { recursive: true });
   });
 
   test('Claude hook events invalidate previews and failures are never shown as updates', async () => {
