@@ -1,7 +1,11 @@
 import * as vscode from 'vscode';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import {
+  DEFAULT_EXCLUDE,
+  DEFAULT_INCLUDE,
+  MANIFEST_FILENAME,
+  type ScanSettings,
   createEnvLookup,
   createPathFilter,
   loadManifest,
@@ -19,8 +23,10 @@ const MAX_SOURCE_BYTES = 1024 * 1024;
 export type ProjectState = 'no-manifest' | 'invalid' | 'unsupported-version' | 'ok';
 
 /**
- * One workspace folder with a manifest. Keeps the reference index current from disk, open
- * editors and the manifest; keeps the last valid manifest when a new edit is invalid.
+ * One FigBridge project: the directory of a `figma.design.yaml` (anywhere in a workspace folder),
+ * or a workspace folder without a manifest, where only `@figma <link>` annotations resolve.
+ * Keeps the reference index current from disk, open editors and the manifest, and keeps the last
+ * valid manifest when a new edit is invalid. Nested projects are excluded from their parent.
  */
 export class Project implements vscode.Disposable {
   readonly index = new ReferenceIndex();
@@ -37,41 +43,58 @@ export class Project implements vscode.Disposable {
 
   constructor(
     readonly folder: vscode.WorkspaceFolder,
+    /** Project root: the manifest's directory, or the workspace folder. */
+    readonly root: vscode.Uri,
     private readonly scanner: Scanner,
+    /** Root-relative POSIX paths of nested projects, which this project must not scan. */
+    private readonly nested: readonly string[] = [],
+    manifestName = MANIFEST_FILENAME,
   ) {
-    this.id = createHash('sha256').update(folder.uri.toString()).digest('hex').slice(0, 16);
+    this.id = createHash('sha256').update(root.toString()).digest('hex').slice(0, 16);
+    this.manifestUri = vscode.Uri.joinPath(root, manifestName);
   }
 
-  get manifestUri(): vscode.Uri {
-    const rel = vscode.workspace.getConfiguration('figbridge', this.folder.uri).get<string>('manifestPath', 'figma.design.yaml');
-    return vscode.Uri.joinPath(this.folder.uri, rel);
+  readonly manifestUri: vscode.Uri;
+
+  /** Display name: the folder name, plus the sub-path for nested projects. */
+  get name(): string {
+    const sub = relative(this.folder.uri.fsPath, this.root.fsPath).split(sep).join('/');
+    return sub ? `${this.folder.name}/${sub}` : this.folder.name;
+  }
+
+  get scanSettings(): ScanSettings {
+    return this.manifest?.scan ?? { include: DEFAULT_INCLUDE, exclude: DEFAULT_EXCLUDE };
   }
 
   get manifest(): Manifest | undefined {
     return this.index.getManifest();
   }
 
+  /** Root-relative POSIX path of a file this project owns, else undefined. */
   relPath(uri: vscode.Uri): string | undefined {
-    if (uri.scheme !== 'file' && uri.scheme !== 'untitled') return undefined;
-    const rel = vscode.workspace.asRelativePath(uri, false);
-    if (rel === uri.fsPath || rel.startsWith('..')) return undefined;
-    const folder = vscode.workspace.getWorkspaceFolder(uri);
-    if (folder?.uri.toString() !== this.folder.uri.toString()) return undefined;
-    // asRelativePath prefixes the folder name in multi-root workspaces.
-    const prefix = `${this.folder.name}/`;
-    return (vscode.workspace.workspaceFolders?.length ?? 0) > 1 && rel.startsWith(prefix) ? rel.slice(prefix.length) : rel;
+    if (uri.scheme !== 'file') return undefined;
+    const rel = relative(this.root.fsPath, uri.fsPath);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) return undefined;
+    const posix = rel.split(sep).join('/');
+    if (this.nested.some((n) => posix === n || posix.startsWith(`${n}/`))) return undefined;
+    return posix;
+  }
+
+  /** True when the file belongs to this project (and not to a nested one). */
+  owns(uri: vscode.Uri): boolean {
+    return this.relPath(uri) !== undefined;
   }
 
   uriOf(relPath: string): vscode.Uri {
-    return vscode.Uri.joinPath(this.folder.uri, ...relPath.split('/'));
+    return vscode.Uri.joinPath(this.root, ...relPath.split('/'));
   }
 
   async start(): Promise<void> {
-    const manifestWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.folder, '{figma.design.yaml,.env}'));
+    const manifestWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.root, `{${this.manifestUri.path.split('/').pop()},.env}`));
     manifestWatcher.onDidChange(() => this.scheduleManifestReload());
     manifestWatcher.onDidCreate(() => this.scheduleManifestReload());
     manifestWatcher.onDidDelete(() => this.scheduleManifestReload());
-    const sourceWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.folder, '**/*'));
+    const sourceWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.root, '**/*'));
     sourceWatcher.onDidChange((u) => this.scheduleFile(u));
     sourceWatcher.onDidCreate((u) => this.scheduleFile(u));
     sourceWatcher.onDidDelete((u) => {
@@ -90,9 +113,6 @@ export class Project implements vscode.Disposable {
         else if (e.contentChanges.length) this.scheduleFile(e.document.uri);
       }),
       vscode.workspace.onDidCloseTextDocument((d) => this.scheduleFile(d.uri)),
-      vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('figbridge.manifestPath', this.folder.uri)) void this.reloadManifest(true);
-      }),
     );
     await this.reloadManifest(true);
   }
@@ -106,17 +126,19 @@ export class Project implements vscode.Disposable {
   async reloadManifest(forceRescan: boolean): Promise<void> {
     const text = await this.readText(this.manifestUri);
     if (text === undefined) {
+      // No manifest: only `@figma <link>` annotations resolve; scan with the default globs.
+      const hadManifest = !!this.manifest;
       this.manifestResult = undefined;
       this.state = 'no-manifest';
       this.index.setManifest(undefined);
-      this.index.clearFiles();
-      this.index.scanState = 'pending';
+      this.filter = createPathFilter(this.scanSettings);
+      if (forceRescan || hadManifest) await this.rescan();
       this.changed.fire();
       return;
     }
     const names = referencedEnvNames(text);
     // .env is only read in trusted workspaces and only for variables the manifest references.
-    const dotenv = names.size && vscode.workspace.isTrusted ? await this.readText(vscode.Uri.joinPath(this.folder.uri, '.env')) : undefined;
+    const dotenv = names.size && vscode.workspace.isTrusted ? await this.readText(vscode.Uri.joinPath(this.root, '.env')) : undefined;
     const result = loadManifest(text, vscode.workspace.asRelativePath(this.manifestUri, false), createEnvLookup(names, process.env, dotenv));
     this.manifestResult = result;
     if (result.manifest) {
@@ -142,8 +164,7 @@ export class Project implements vscode.Disposable {
 
   /** Full rescan; cancels any scan in progress. */
   async rescan(): Promise<void> {
-    const manifest = this.manifest;
-    if (!manifest) return;
+    const scan = this.scanSettings;
     this.scanToken?.cancel();
     const cts = new vscode.CancellationTokenSource();
     this.scanToken = cts;
@@ -153,11 +174,11 @@ export class Project implements vscode.Disposable {
     await vscode.window.withProgress({ location: { viewId: 'figbridge.overview' }, title: 'Scanning for @figma references' }, async () => {
       // VS Code globs don't nest braces: search per include pattern, let VS Code prune the
       // brace-free excludes (node_modules etc.), and apply the exact filter afterwards.
-      const simpleExcludes = manifest.scan.exclude.filter((p) => !/[{}]/.test(p));
-      const exclude = simpleExcludes.length ? new vscode.RelativePattern(this.folder, `{${simpleExcludes.join(',')}}`) : undefined;
+      const simpleExcludes = scan.exclude.filter((p) => !/[{}]/.test(p));
+      const exclude = simpleExcludes.length ? new vscode.RelativePattern(this.root, `{${simpleExcludes.join(',')}}`) : undefined;
       const seen = new Map<string, vscode.Uri>();
-      for (const pattern of manifest.scan.include) {
-        const found = await vscode.workspace.findFiles(new vscode.RelativePattern(this.folder, pattern), exclude, undefined, cts.token);
+      for (const pattern of scan.include) {
+        const found = await vscode.workspace.findFiles(new vscode.RelativePattern(this.root, pattern), exclude, undefined, cts.token);
         for (const u of found) seen.set(u.toString(), u);
       }
       const uris = [...seen.values()];
@@ -187,7 +208,7 @@ export class Project implements vscode.Disposable {
   /** Scans one file, preferring an open editor buffer over disk. Returns false on read failure. */
   private async scanUri(uri: vscode.Uri): Promise<boolean> {
     const rel = this.relPath(uri);
-    if (!rel || !this.manifest || !this.filter(rel)) return true;
+    if (!rel || !this.filter(rel)) return true;
     const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
     let text: string | undefined;
     if (open) text = open.getText();

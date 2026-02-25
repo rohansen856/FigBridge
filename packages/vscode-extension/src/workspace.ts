@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { FigmaClient, Scanner, type AnnotationOccurrence, type RefId, type ResolvedRef } from '@figbridge/core';
+import { dirname, relative, sep } from 'node:path';
+import { FigmaClient, MANIFEST_FILENAME, Scanner, type AnnotationOccurrence, type RefId, type ResolvedRef } from '@figbridge/core';
 import { ProjectPreviews, TokenStore } from './figma';
 import { Project } from './project';
 
@@ -11,7 +12,13 @@ export interface Located {
   resolved?: ResolvedRef;
 }
 
-/** Owns every Project (one per workspace folder) and the shared Figma client. */
+const DISCOVERY_EXCLUDE = '{**/node_modules/**,**/.git/**,**/build/**,**/dist/**,**/out/**,**/.dart_tool/**,**/.next/**,**/Pods/**}';
+
+/**
+ * Owns every Project and the shared Figma client. A workspace folder yields one project per
+ * `figma.design.yaml` found anywhere inside it, plus a manifest-less project at the folder root
+ * (for `@figma <link>` annotations) when the root has no manifest of its own.
+ */
 export class FigBridgeWorkspace implements vscode.Disposable {
   readonly projects = new Map<string, { project: Project; previews: ProjectPreviews }>();
   readonly client: FigmaClient;
@@ -39,39 +46,85 @@ export class FigBridgeWorkspace implements vscode.Disposable {
 
   async start(): Promise<void> {
     await Promise.all((vscode.workspace.workspaceFolders ?? []).map((f) => this.add(f)));
+    // A manifest appearing or disappearing anywhere changes the project layout.
+    const watcher = vscode.workspace.createFileSystemWatcher(`**/${MANIFEST_FILENAME}`, false, true, false);
+    const relayout = (uri: vscode.Uri) => {
+      const folder = vscode.workspace.getWorkspaceFolder(uri);
+      if (folder && !/[\\/](node_modules|\.git|build|dist|\.dart_tool)[\\/]/.test(uri.fsPath)) void this.rediscover(folder);
+    };
+    watcher.onDidCreate(relayout);
+    watcher.onDidDelete(relayout);
+    this.disposables.push(
+      watcher,
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        for (const f of vscode.workspace.workspaceFolders ?? []) if (e.affectsConfiguration('figbridge.manifestPath', f.uri)) void this.rediscover(f);
+      }),
+    );
     this.updateContext();
   }
 
+  private readonly folderProjects = new Map<string, string[]>();
+
   private async add(folder: vscode.WorkspaceFolder): Promise<void> {
-    if (folder.uri.scheme !== 'file' || this.projects.has(folder.uri.toString())) return;
-    const project = new Project(folder, this.scanner);
-    const previews = new ProjectPreviews(project, this.client, this.context.globalStorageUri);
-    this.projects.set(folder.uri.toString(), { project, previews });
-    project.onDidChange(() => {
-      this.updateContext();
-      this.changed.fire();
-    });
-    previews.onDidChange(() => this.changed.fire());
-    await project.start();
+    if (folder.uri.scheme !== 'file' || this.folderProjects.has(folder.uri.toString())) return;
+    this.folderProjects.set(folder.uri.toString(), []);
+    const configured = vscode.workspace.getConfiguration('figbridge', folder.uri).get<string>('manifestPath', MANIFEST_FILENAME);
+    const manifests =
+      configured !== MANIFEST_FILENAME
+        ? [vscode.Uri.joinPath(folder.uri, configured)]
+        : await vscode.workspace.findFiles(new vscode.RelativePattern(folder, `**/${MANIFEST_FILENAME}`), DISCOVERY_EXCLUDE, 200);
+    const roots = new Map<string, { root: vscode.Uri; name: string }>();
+    for (const m of manifests) roots.set(vscode.Uri.file(dirname(m.fsPath)).toString(), { root: vscode.Uri.file(dirname(m.fsPath)), name: m.path.split('/').pop()! });
+    if (!roots.has(folder.uri.toString())) roots.set(folder.uri.toString(), { root: folder.uri, name: MANIFEST_FILENAME });
+    const all = [...roots.values()];
+    const keys: string[] = [];
+    for (const { root, name } of all) {
+      const nested = all
+        .filter((o) => o.root.toString() !== root.toString())
+        .map((o) => relative(root.fsPath, o.root.fsPath))
+        .filter((r) => r && !r.startsWith('..'))
+        .map((r) => r.split(sep).join('/'));
+      const project = new Project(folder, root, this.scanner, nested, name);
+      const previews = new ProjectPreviews(project, this.client, this.context.globalStorageUri);
+      this.projects.set(root.toString(), { project, previews });
+      keys.push(root.toString());
+      project.onDidChange(() => {
+        this.updateContext();
+        this.changed.fire();
+      });
+      previews.onDidChange(() => this.changed.fire());
+    }
+    this.folderProjects.set(folder.uri.toString(), keys);
+    await Promise.all(keys.map((k) => this.projects.get(k)!.project.start()));
   }
 
-  private remove(folder: vscode.WorkspaceFolder): void {
-    const entry = this.projects.get(folder.uri.toString());
-    if (!entry) return;
-    entry.previews.dispose();
-    entry.project.dispose();
-    this.projects.delete(folder.uri.toString());
+  /** Re-discovers projects in a folder (a manifest was created or deleted). */
+  async rediscover(folder: vscode.WorkspaceFolder): Promise<void> {
+    this.remove(folder);
+    await this.add(folder);
+    this.updateContext();
     this.changed.fire();
   }
 
-  /** Projects that have a usable (or last-known-good) manifest. */
-  active(): Array<{ project: Project; previews: ProjectPreviews }> {
-    return [...this.projects.values()].filter((p) => p.project.manifest || p.project.state !== 'no-manifest');
+  private remove(folder: vscode.WorkspaceFolder): void {
+    for (const key of this.folderProjects.get(folder.uri.toString()) ?? []) {
+      const entry = this.projects.get(key);
+      entry?.previews.dispose();
+      entry?.project.dispose();
+      this.projects.delete(key);
+    }
+    this.folderProjects.delete(folder.uri.toString());
+    this.changed.fire();
   }
 
+  /** Projects with a (last-known-good or broken) manifest, or with any annotations. */
+  active(): Array<{ project: Project; previews: ProjectPreviews }> {
+    return [...this.projects.values()].filter((p) => p.project.manifest || p.project.state !== 'no-manifest' || p.project.index.allOccurrences().length > 0);
+  }
+
+  /** The project that owns a file: the deepest project root containing it. */
   forUri(uri: vscode.Uri): { project: Project; previews: ProjectPreviews } | undefined {
-    const folder = vscode.workspace.getWorkspaceFolder(uri);
-    return folder ? this.projects.get(folder.uri.toString()) : undefined;
+    return [...this.projects.values()].find((p) => p.project.owns(uri));
   }
 
   /** Finds the annotation at a position, if any, and resolves it against the manifest. */
