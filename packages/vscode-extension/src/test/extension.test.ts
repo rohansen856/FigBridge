@@ -1,6 +1,7 @@
 import * as assert from 'node:assert';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import * as vscode from 'vscode';
 
 let api: any;
