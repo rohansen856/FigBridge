@@ -31,7 +31,11 @@ export interface RefDto {
 }
 
 export class Tools {
-  constructor(private readonly indexer: DiskIndexer) {}
+  /** `prefix`: this project's root relative to the Claude project root (`''` or `'apps/web/'`). */
+  constructor(
+    private readonly indexer: DiskIndexer,
+    readonly prefix = '',
+  ) {}
 
   private get index() {
     return this.indexer.index;
@@ -40,7 +44,7 @@ export class Tools {
   private envelope<T extends object>(data: T) {
     return {
       ...data,
-      manifestPath: 'figma.design.yaml',
+      manifestPath: this.indexer.linksOnly ? null : `${this.prefix}figma.design.yaml`,
       manifestState: this.indexer.manifest?.state ?? 'missing',
       scanState: this.index.scanState,
       note: NOTE,
@@ -50,7 +54,7 @@ export class Tools {
   private occurrenceDto(o: AnnotationOccurrence): OccurrenceDto {
     const parent = o.sourceParentId ? this.index.occurrencesIn(o.relPath).find((x) => x.id === o.sourceParentId) : undefined;
     return {
-      path: o.relPath,
+      path: this.prefix + o.relPath,
       line: o.idRange.start.line + 1,
       attachment: o.attachment,
       ...(o.owner ? { owner: o.owner.name, ownerKind: o.owner.kind } : {}),
@@ -86,11 +90,11 @@ export class Tools {
 
   async resolveRef(rawId: string) {
     await this.indexer.refresh();
+    if (/^https?:\/\//i.test(rawId.trim())) return this.resolveLink(rawId.trim());
     const id = rawId.trim().toUpperCase();
     if (!isRefId(id)) return this.envelope({ found: false, refId: rawId, reason: 'invalid-id', message: 'Reference IDs are 12 characters from 0-9 and A-Z excluding I, L, O and U.' });
     const m = this.index.getManifest();
     if (!m) return this.envelope({ found: false, refId: id, reason: 'no-manifest', message: 'figma.design.yaml is missing or invalid; see figbridge_health.' });
-    if (/^https?:\/\//i.test(rawId.trim())) return this.resolveLink(rawId.trim());
     const ref = m.refs.get(id as RefId);
     if (!ref) {
       const occs = this.index.occurrencesFor(id as RefId).slice(0, MAX_OCCURRENCES).map((o) => this.occurrenceDto(o));
@@ -105,10 +109,6 @@ export class Tools {
     return this.envelope({ found: true, ...this.refDto(ref) });
   }
 
-  async searchRefs(args: { query?: string; fileAlias?: string; tag?: string; status?: 'used' | 'unused' | 'unresolved' | 'deprecated'; limit?: number; cursor?: number }) {
-    await this.indexer.refresh();
-    const m = this.index.getManifest();
-    const limit = Math.min(100, Math.max(1, args.limit ?? 25));
   /** A Figma URL: the node it selects, any manifest mapping for it, and where code links to it. */
   private resolveLink(url: string) {
     const parsed = parseFigmaUrl(url);
@@ -131,6 +131,10 @@ export class Tools {
     });
   }
 
+  async searchRefs(args: { query?: string; fileAlias?: string; tag?: string; status?: 'used' | 'unused' | 'unresolved' | 'deprecated'; limit?: number; cursor?: number }) {
+    await this.indexer.refresh();
+    const m = this.index.getManifest();
+    const limit = Math.min(100, Math.max(1, args.limit ?? 25));
     const offset = Math.max(0, args.cursor ?? 0);
     const q = args.query?.trim().toLowerCase();
     if (args.status === 'unresolved') {

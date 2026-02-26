@@ -3,6 +3,8 @@ import { join, sep } from 'node:path';
 import { glob } from 'tinyglobby';
 import {
   createPathFilter,
+  DEFAULT_EXCLUDE,
+  DEFAULT_INCLUDE,
   isInside,
   loadManifestFromDisk,
   MANIFEST_FILENAME,
@@ -29,8 +31,15 @@ export class DiskIndexer {
   constructor(
     readonly root: string,
     private readonly scanner: Scanner,
+    /** Root-relative POSIX paths of nested projects, which this indexer must not scan. */
+    private readonly nested: readonly string[] = [],
     private readonly minIntervalMs = 1000,
   ) {}
+
+  /** True when there is no manifest: only `@figma <link>` annotations resolve. */
+  get linksOnly(): boolean {
+    return !this.index.getManifest();
+  }
 
   refresh(): Promise<void> {
     if (Date.now() - this.lastRefresh < this.minIntervalMs && this.manifest) return Promise.resolve();
@@ -55,15 +64,26 @@ export class DiskIndexer {
           this.index.clearFiles();
           this.stamps.clear();
         }
-      } else if (!this.index.getManifest()) {
-        this.index.scanState = 'failed';
-        return;
+      } else if (!this.manifest.diagnostics.some((d) => d.code !== 'CONFIG_NOT_FOUND')) {
+        // No manifest (or it was deleted).
+        if (this.index.getManifest()) {
+          this.index.setManifest(undefined);
+          this.index.clearFiles();
+          this.stamps.clear();
+        }
+      } else {
+        // A broken manifest: keep the last valid one, or report failure if there never was one.
+        if (!this.index.getManifest()) {
+          this.index.scanState = 'failed';
+          return;
+        }
       }
     }
-    const m = this.index.getManifest();
-    if (!m) return;
-    const filter = createPathFilter(m.scan);
-    const files = (await glob(m.scan.include, { cwd: this.root, ignore: m.scan.exclude, followSymbolicLinks: false, onlyFiles: true })).map((f) => f.split(sep).join('/'));
+    // Without a manifest, scan with the default globs so link annotations still resolve.
+    const scan = this.index.getManifest()?.scan ?? { include: DEFAULT_INCLUDE, exclude: DEFAULT_EXCLUDE };
+    const baseFilter = createPathFilter(scan);
+    const filter = (p: string) => baseFilter(p) && !this.nested.some((n) => p === n || p.startsWith(`${n}/`));
+    const files = (await glob(scan.include, { cwd: this.root, ignore: scan.exclude, followSymbolicLinks: false, onlyFiles: true })).map((f) => f.split(sep).join('/'));
     const present = new Set<string>();
     let partial = false;
     for (const relPath of files) {

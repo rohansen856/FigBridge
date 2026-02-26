@@ -1,9 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { findManifestRoot, MANIFEST_FILENAME, Scanner } from '@figbridge/core';
-import { DiskIndexer } from './indexer.js';
-import { Tools } from './tools.js';
+import { MANIFEST_FILENAME, Scanner } from '@figbridge/core';
+import { ProjectRouter } from './router.js';
 
 export const SERVER_INSTRUCTIONS = `FigBridge resolves @figma annotations in source comments: opaque IDs ("// @figma F7KQ9M2X4P6D", mapped in the repository's ${MANIFEST_FILENAME}) and direct Figma links ("// @figma https://www.figma.com/design/…?node-id=1-2").
 - Before implementing or changing code that carries an @figma annotation, call figbridge_resolve_ref to get the exact Figma fileKey, nodeId and URL.
@@ -13,7 +12,7 @@ export const SERVER_INSTRUCTIONS = `FigBridge resolves @figma annotations in sou
 
 const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 1) }], structuredContent: data as Record<string, unknown> });
 
-export function createServer(tools: Tools): McpServer {
+export function createServer(tools: ProjectRouter): McpServer {
   const server = new McpServer({ name: 'figbridge', version: '0.1.0' }, { instructions: SERVER_INSTRUCTIONS });
   const readOnly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
@@ -72,11 +71,10 @@ export function createServer(tools: Tools): McpServer {
 
 export async function runMcpServer(wasmDir: string): Promise<void> {
   const start = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  const root = findManifestRoot(start) ?? start;
   const scanner = await Scanner.create({ wasmDir });
-  const indexer = new DiskIndexer(root, scanner);
-  const server = createServer(new Tools(indexer));
+  const router = await ProjectRouter.create(start, scanner);
+  const server = createServer(router);
   await server.connect(new StdioServerTransport());
   // Log to stderr only; stdout carries the MCP protocol.
-  process.stderr.write(`figbridge MCP: serving ${root}\n`);
+  process.stderr.write(`figbridge MCP: serving ${router.start}\n`);
 }
