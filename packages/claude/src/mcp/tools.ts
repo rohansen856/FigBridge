@@ -1,4 +1,4 @@
-import { isRefId, type AnnotationOccurrence, type ManifestRef, type RefId } from '@figbridge/core';
+import { apiKeyOf, isRefId, linkKey, parseFigmaUrl, type AnnotationOccurrence, type ManifestRef, type RefId } from '@figbridge/core';
 import type { DiskIndexer } from './indexer.js';
 
 const MAX_OCCURRENCES = 20;
@@ -90,6 +90,7 @@ export class Tools {
     if (!isRefId(id)) return this.envelope({ found: false, refId: rawId, reason: 'invalid-id', message: 'Reference IDs are 12 characters from 0-9 and A-Z excluding I, L, O and U.' });
     const m = this.index.getManifest();
     if (!m) return this.envelope({ found: false, refId: id, reason: 'no-manifest', message: 'figma.design.yaml is missing or invalid; see figbridge_health.' });
+    if (/^https?:\/\//i.test(rawId.trim())) return this.resolveLink(rawId.trim());
     const ref = m.refs.get(id as RefId);
     if (!ref) {
       const occs = this.index.occurrencesFor(id as RefId).slice(0, MAX_OCCURRENCES).map((o) => this.occurrenceDto(o));
@@ -108,10 +109,32 @@ export class Tools {
     await this.indexer.refresh();
     const m = this.index.getManifest();
     const limit = Math.min(100, Math.max(1, args.limit ?? 25));
+  /** A Figma URL: the node it selects, any manifest mapping for it, and where code links to it. */
+  private resolveLink(url: string) {
+    const parsed = parseFigmaUrl(url);
+    if (!parsed.ok || !parsed.value.nodeId) return this.envelope({ found: false, refId: url, reason: 'invalid-link', message: 'Expected a figma.com design link that selects a node (?node-id=…).' });
+    const apiKey = apiKeyOf(parsed.value);
+    const key = linkKey(apiKey, parsed.value.nodeId);
+    const resolved = this.index.resolve(key)!;
+    const m = this.index.getManifest();
+    const mapped = [...(m?.refs.values() ?? [])].find((r) => r.nodeId === parsed.value.nodeId && m!.files.get(r.file)?.apiKey === apiKey);
+    const occurrences = [...this.index.occurrencesFor(key), ...(mapped ? this.index.occurrencesFor(mapped.id) : [])];
+    return this.envelope({
+      found: true,
+      refId: mapped?.id ?? null,
+      ...(resolved.ref.name ? { name: resolved.ref.name } : {}),
+      file: { alias: resolved.file.alias, fileKey: resolved.file.apiKey, resolved: true },
+      nodeId: parsed.value.nodeId,
+      figmaUrl: resolved.openUrl,
+      usedInCode: occurrences.length,
+      occurrences: occurrences.slice(0, MAX_OCCURRENCES).map((o) => this.occurrenceDto(o)),
+    });
+  }
+
     const offset = Math.max(0, args.cursor ?? 0);
     const q = args.query?.trim().toLowerCase();
     if (args.status === 'unresolved') {
-      const ids = [...new Set(this.index.allOccurrences().filter((o) => !m?.refs.has(o.refId)).map((o) => o.refId))].sort();
+      const ids = [...new Set(this.index.allOccurrences().filter((o) => !o.link && !m?.refs.has(o.refId)).map((o) => o.refId))].sort();
       const page = ids.filter((id) => !q || id.toLowerCase().includes(q)).slice(offset, offset + limit);
       return this.envelope({
         total: ids.length,
@@ -150,17 +173,17 @@ export class Tools {
       // Annotations on or enclosing the line: the annotation itself, or its owner's range.
       occs = occs.filter((o) => o.idRange.start.line === line0 || (o.owner && o.owner.range.start.line <= line0 && line0 <= o.owner.range.end.line));
     }
-    const m = this.index.getManifest();
     return this.envelope({
       path,
       results: occs.slice(0, 50).map((o) => {
-        const ref = m?.refs.get(o.refId);
-        const resolved = ref ? this.index.resolve(o.refId) : undefined;
+        const resolved = this.index.resolve(o.refId);
+        const ref = resolved?.ref;
         return {
-          refId: o.refId,
-          found: !!ref,
+          refId: o.link ? null : o.refId,
+          ...(o.link ? { link: o.rawId } : {}),
+          found: !!resolved,
           ...this.occurrenceDto(o),
-          ...(ref ? { name: ref.name, nodeId: ref.nodeId, file: ref.file, fileKey: resolved?.file.apiKey, figmaUrl: resolved?.openUrl } : {}),
+          ...(ref ? { name: ref.name, nodeId: ref.nodeId, file: resolved.file.alias, fileKey: resolved.file.apiKey, figmaUrl: resolved.openUrl } : {}),
         };
       }),
     });

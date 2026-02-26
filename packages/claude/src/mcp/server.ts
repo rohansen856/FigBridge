@@ -5,7 +5,7 @@ import { findManifestRoot, MANIFEST_FILENAME, Scanner } from '@figbridge/core';
 import { DiskIndexer } from './indexer.js';
 import { Tools } from './tools.js';
 
-export const SERVER_INSTRUCTIONS = `FigBridge resolves @figma reference IDs found in source comments (e.g. "// @figma F7KQ9M2X4P6D") using the repository's ${MANIFEST_FILENAME}.
+export const SERVER_INSTRUCTIONS = `FigBridge resolves @figma annotations in source comments: opaque IDs ("// @figma F7KQ9M2X4P6D", mapped in the repository's ${MANIFEST_FILENAME}) and direct Figma links ("// @figma https://www.figma.com/design/…?node-id=1-2").
 - Before implementing or changing code that carries an @figma annotation, call figbridge_resolve_ref to get the exact Figma fileKey, nodeId and URL.
 - Then use the official Figma MCP tools with that fileKey/nodeId for live design context. Never guess a node from a name.
 - If a reference is not found, report the missing mapping instead of inventing one.
@@ -21,8 +21,8 @@ export function createServer(tools: Tools): McpServer {
     'figbridge_resolve_ref',
     {
       title: 'Resolve @figma reference',
-      description: 'Resolve a 12-character @figma reference ID to its Figma file key, node ID, URL, labels and the source locations that use it.',
-      inputSchema: { refId: z.string().min(1).max(64).describe('The ID after "@figma", e.g. F7KQ9M2X4P6D') },
+      description: 'Resolve what follows "@figma" in a source comment (a 12-character ID or a Figma link) to its Figma file key, node ID, URL, labels and the source locations that use it.',
+      inputSchema: { refId: z.string().min(1).max(2048).describe('The ID or Figma URL after "@figma", e.g. F7KQ9M2X4P6D or https://www.figma.com/design/…?node-id=1-2') },
       annotations: readOnly,
     },
     async ({ refId }) => json(await tools.resolveRef(refId)),
