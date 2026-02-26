@@ -73,6 +73,13 @@ describe('MCP server (bundled)', () => {
     expect(await call('figbridge_resolve_ref', { refId: 'not an id' })).toMatchObject({ found: false, reason: 'invalid-id' });
   });
 
+  it('resolves a Figma link to its manifest mapping and code locations', async () => {
+    const r = await call('figbridge_resolve_ref', { refId: 'https://www.figma.com/design/aHvbMOTkjQ3dmWBoWbMuv2/Food?node-id=1-666&t=x' });
+    expect(r).toMatchObject({ found: true, refId: 'F7KQ9M2X4P6D', name: 'Order details', nodeId: '1:666' });
+    expect(r.occurrences[0]).toMatchObject({ path: 'lib/screens/order_details.dart' });
+    expect(await call('figbridge_resolve_ref', { refId: 'https://www.figma.com/design/aHvbMOTkjQ3dmWBoWbMuv2/Food' })).toMatchObject({ found: false, reason: 'invalid-link' });
+  });
+
   it('searches and pages', async () => {
     expect((await call('figbridge_search_refs', { status: 'unused' })).results.map((r: { refId: string }) => r.refId)).toEqual(['Q1R2S3T4V5W6']);
     expect((await call('figbridge_search_refs', { status: 'unresolved' })).results.map((r: { refId: string }) => r.refId)).toEqual(['RETRD0000001', 'ZZZZZZZZZZZ9']);
@@ -91,9 +98,41 @@ describe('MCP server (bundled)', () => {
 
   it('reports health without leaking environment values', async () => {
     const h = await call('figbridge_health');
-    expect(h.summary).toMatchObject({ occurrences: 9, unresolvedOccurrences: 2, unusedMappings: 1 });
+    expect(h.totals).toMatchObject({ occurrences: 9, unresolvedOccurrences: 2, unusedMappings: 1 });
+    expect(h.projects).toHaveLength(1);
     expect(JSON.stringify(h)).not.toContain(work);
     expect(stderr).not.toContain(SEED);
+  });
+});
+
+describe('MCP server started above nested manifests', () => {
+  let client: Client;
+  beforeAll(async () => {
+    // work/ has no manifest; work/demo/ has one; work/loose.ts uses a link annotation.
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(join(work, 'loose.ts'), '// @figma https://www.figma.com/design/aHvbMOTkjQ3dmWBoWbMuv2/Food?node-id=1-81\nexport const Splash = () => null;\n');
+    const transport = new StdioClientTransport({ command: process.execPath, args: [BIN, 'mcp'], cwd: work, env: { PATH: process.env.PATH ?? '', CLAUDE_PROJECT_DIR: work, FIGMA_FILE_URL: URL, HOME: work } });
+    client = new Client({ name: 'test', version: '0' });
+    await client.connect(transport);
+  }, 20000);
+  afterAll(async () => client?.close());
+  const call = async (name: string, args: Record<string, unknown> = {}) => JSON.parse(((await client.callTool({ name, arguments: args })).content as Array<{ text: string }>)[0]!.text);
+
+  it('discovers the nested project and prefixes its paths', async () => {
+    const r = await call('figbridge_resolve_ref', { refId: 'F7KQ9M2X4P6D' });
+    expect(r).toMatchObject({ found: true, project: 'demo/', nodeId: '1:666' });
+    expect(r.occurrences[0].path).toBe('demo/lib/screens/order_details.dart');
+    const src = await call('figbridge_refs_for_source', { path: 'demo/lib/screens/order_details.dart' });
+    expect(src).toMatchObject({ path: 'demo/lib/screens/order_details.dart', project: 'demo/' });
+    expect(src.results).toHaveLength(2);
+  });
+
+  it('resolves link annotations outside any manifest and reports per-project health', async () => {
+    const src = await call('figbridge_refs_for_source', { path: 'loose.ts' });
+    expect(src.results[0]).toMatchObject({ found: true, nodeId: '1:81', attachment: 'declaration', owner: 'Splash' });
+    const h = await call('figbridge_health');
+    expect(h.projects.map((p: { project: string }) => p.project).sort()).toEqual(['.', 'demo/']);
+    expect(h.totals.occurrences).toBe(10);
   });
 });
 
