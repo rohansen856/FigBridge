@@ -33,10 +33,7 @@ An optional Claude Code bridge exposes project mappings as machine-readable cont
 | [`docs/12-architecture-decisions.md`](./12-architecture-decisions.md) | ADRs documenting chosen and deferred decisions |
 | [`docs/13-open-questions-and-risks.md`](./13-open-questions-and-risks.md) | Blocking decisions, risks, validation spikes |
 | [`docs/14-glossary-and-reference-links.md`](./14-glossary-and-reference-links.md) | Terms and authoritative links |
-| [`examples/figma.design.yaml`](../../examples/figma.design.yaml) | Example repository manifest |
-| [`examples/.env.example`](../../examples/.env.example) | Example non-secret environment configuration |
-| [`examples/annotations.dart`](../../examples/annotations.dart) | Hierarchical Dart annotation example |
-| [`examples/annotations.tsx`](../../examples/annotations.tsx) | Hierarchical TSX annotation example |
+| `examples/` | Removed from the repository (example apps are kept locally) |
 
 ## Decisions already supplied by the product owner
 

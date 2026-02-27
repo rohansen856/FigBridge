@@ -19,6 +19,7 @@ User documentation: [`packages/vscode-extension/README.md`](packages/vscode-exte
 | `packages/vscode-extension` | The extension: hovers, CodeLens, diagnostics and quick fixes, TreeViews, script-free preview panel, mapping flows, Claude activity. Bundles the Claude plugin. |
 | `packages/claude` | The `figbridge-claude` CLI (`mcp` = read-only MCP server over stdio, `hook` = PostToolUse/PostToolUseFailure hook) and the Claude Code plugin/marketplace it builds into. |
 | `schemas/figma.design.schema.json` | Generated JSON Schema for the manifest (from `packages/core/src/manifest/schema.ts`) |
+| `examples/` | Local only (git-ignored): the Food Couriers design implemented in Next.js and Flutter |
 | `fixtures/` | Scanner fixtures, a demo workspace mapped to real nodes of the test file, and sanitised Claude hook payloads |
 | `docs/spec/` | Original specification bundle |
 | `docs/phase0-spike-results.md` | Phase 0 evidence and the decisions that supersede the spec |
