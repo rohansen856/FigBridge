@@ -12,7 +12,14 @@ class CheckoutScreen extends StatelessWidget { … }
 export function CheckoutSummary() { … }
 ```
 
-A committed `figma.design.yaml` maps each ID to a Figma file and node. FigBridge then gives you:
+A committed `figma.design.yaml` maps each ID to a Figma file and node. You can also paste a Figma link directly, with no manifest entry needed:
+
+```tsx
+// @figma https://www.figma.com/design/aHvbMOTkjQ3dmWBoWbMuv2/Food-Couriers?node-id=1-520
+export function FoodCard() { … }
+```
+
+FigBridge then gives you:
 
 - **Hover previews.** A rendered image of the exact node, with its name, file and status.
 - **Open in Figma.** Opens the node itself, not just the file.
@@ -35,7 +42,11 @@ FigBridge works alongside the official Figma for VS Code extension and the Figma
 
 ## Annotations
 
-- **Syntax:** `@figma <ID>`, inside a comment. Any comment style works (`//`, `///`, `/* */`, JSX `{/* */}`).
+- **Syntax:** `@figma <ID>` or `@figma <Figma link>`, inside a comment. Any comment style works (`//`, `///`, `/* */`, JSX `{/* */}`).
+- **Links vs IDs:**
+  - A link needs no manifest. It must select a node; in Figma, use *Copy link to selection*.
+  - An ID keeps comments short and lets you retarget or retire mappings in one place.
+  - When the manifest maps the same node, a link annotation shows that mapping's name and counts as a use of it.
 - **What is ignored:** text inside strings, template literals and JSX text is never treated as an annotation.
 - **ID format:** 12 characters from `0-9 A-Z`, excluding `I L O U` (Crockford Base32, 60 random bits).
 - **What IDs are and aren't:** they are opaque and stable when files or frames are renamed. They are **not** secrets. Anyone with the manifest can resolve them, and Figma's own permissions still decide who can see a design.
@@ -50,6 +61,8 @@ FigBridge works alongside the official Figma for VS Code extension and the Figma
 An annotation directly above a declaration belongs to that declaration. An annotation above an expression, such as a widget or JSX element, marks a *usage*. The source hierarchy nests annotations inside the nearest annotated declaration that encloses them.
 
 ## The manifest
+
+FigBridge finds every `figma.design.yaml` in the workspace. Each one defines a project rooted at its directory, so a monorepo can keep one manifest per app. Files outside every manifest still get link annotations.
 
 ```yaml
 schemaVersion: 1
@@ -106,6 +119,13 @@ Run **FigBridge: Set Up Claude Code Integration…**. It shows exactly what will
   - **Failed calls** are shown as failures, never as updates.
   - **Unknown target:** when Claude's call doesn't say which file changed, FigBridge shows *target unknown* and asks you to refresh.
 - **A skill** that tells Claude how to use `@figma` references.
+
+**`/figbridge` in Claude Code:** type something like `/figbridge implement all annotated widgets from their Figma references`. Claude then:
+- finds the annotated declarations;
+- resolves each one to its Figma node and reads the design through the Figma MCP;
+- writes the UI only, in your project's framework, reusing your theme and components.
+
+Before replacing UI that already exists, it asks: overwrite, skip, overwrite all for this run, or always overwrite in this project. Saying "don't ask me" in the request skips the questions. The "always" choice is saved in `.claude/figbridge.local.json`.
 
 **Requirements and removal:** the plugin needs Node.js 20+ on your `PATH`. Remove it with `claude plugin uninstall figbridge@figbridge-local`.
 
