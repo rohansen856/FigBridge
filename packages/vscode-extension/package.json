@@ -2,7 +2,7 @@
   "name": "figbridge",
   "displayName": "FigBridge",
   "description": "Link source code to exact Figma nodes with short @figma IDs: hover previews, navigation, mapping health and Claude Code integration.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "figbridge",
   "license": "MIT",
   "private": true,
