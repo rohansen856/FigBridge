@@ -18,7 +18,7 @@ import type { ActivityLog } from './activity';
 import type { ReferencesProvider } from './views';
 import type { Project } from './project';
 import { addFile, addRef, MANIFEST_TEMPLATE, retargetRef, retireRef } from './manifest-edit';
-import { describeError } from './format';
+import { describeError, formatDuration } from './format';
 import { setupClaude } from './claude-setup';
 
 type RefArg = RefId | string | { refId?: RefId } | undefined;
@@ -93,6 +93,7 @@ export function registerCommands(deps: CommandDeps): vscode.Disposable[] {
     }),
 
     reg('figbridge.validateMappings', () => validateMappings(ws)),
+    reg('figbridge.renderAll', (apiKey?: string) => renderAll(ws, typeof apiKey === 'string' ? apiKey : undefined)),
 
     reg('figbridge.rescan', async () => {
       for (const { project } of ws.projects.values()) await project.reloadManifest(true);
@@ -423,6 +424,68 @@ async function createManifest(ws: FigBridgeWorkspace): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------- batched rendering
+
+/**
+ * Renders every preview (optionally of one Figma file) with one render request per file per 50
+ * nodes. This is the way to use Starter-plan files, which allow only a few requests a month.
+ */
+async function renderAll(ws: FigBridgeWorkspace, onlyApiKey?: string): Promise<void> {
+  if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace to use the Figma API.');
+  if (!(await ws.tokens.has())) throw new Error('Set a Figma access token first.');
+  const jobs = ws
+    .active()
+    .map(({ previews }) => ({ previews, reqs: previews.allRequests().filter((r) => !onlyApiKey || r.apiKey === onlyApiKey) }))
+    .filter((j) => j.reqs.length);
+  const byFile = new Map<string, { count: number; blocked?: number }>();
+  for (const { previews, reqs } of jobs)
+    for (const r of reqs) {
+      const f = byFile.get(r.apiKey) ?? { count: 0, ...(previews.service.blockedUntil(r.apiKey) ? { blocked: previews.service.blockedUntil(r.apiKey)! } : {}) };
+      f.count++;
+      byFile.set(r.apiKey, f);
+    }
+  if (!byFile.size) return void vscode.window.showInformationMessage('FigBridge: no references to render.');
+  const blocked = [...byFile.values()].filter((f) => f.blocked);
+  const ready = [...byFile.entries()].filter(([, f]) => !f.blocked);
+  if (!ready.length) {
+    const until = Math.min(...blocked.map((f) => f.blocked!));
+    return void vscode.window.showWarningMessage(`FigBridge: Figma is rate-limiting renders for ${blocked.length === 1 ? 'this file' : 'these files'}. Try again in ${formatDuration((until - Date.now()) / 1000)}.`);
+  }
+  const nodes = ready.reduce((n, [, f]) => n + f.count, 0);
+  // Each project renders its own batch per file: count requests per project and file.
+  let requests = 0;
+  for (const { previews, reqs } of jobs) {
+    const perFile = new Map<string, number>();
+    for (const r of reqs) if (!previews.service.blockedUntil(r.apiKey)) perFile.set(r.apiKey, (perFile.get(r.apiKey) ?? 0) + 1);
+    for (const n of perFile.values()) requests += Math.ceil(n / 50);
+  }
+  const ok = await vscode.window.showInformationMessage(
+    `Render ${nodes} preview${nodes === 1 ? '' : 's'} from ${ready.length} Figma file${ready.length === 1 ? '' : 's'}?`,
+    {
+      modal: true,
+      detail: `This uses ${requests} render request${requests === 1 ? '' : 's'} (Figma's render endpoint takes up to 50 nodes per request). Files on a Starter plan allow only a few requests per month; up-to-date previews are skipped.${blocked.length ? `\n\n${blocked.length} file${blocked.length === 1 ? ' is' : 's are'} still rate-limited and will be skipped.` : ''}`,
+    },
+    'Render',
+  );
+  if (ok !== 'Render') return;
+  let fresh = 0;
+  const failures = new Map<string, number>();
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'FigBridge: rendering previews' }, async (progress) => {
+    for (const { previews, reqs } of jobs) {
+      const todo = reqs.filter((r) => !previews.service.blockedUntil(r.apiKey));
+      if (!todo.length) continue;
+      progress.report({ message: previews.project.name });
+      for (const status of (await previews.service.renderMany(todo)).values()) {
+        if (status.state === 'fresh') fresh++;
+        else if (status.state === 'error') failures.set(describeError(status.error), (failures.get(describeError(status.error)) ?? 0) + 1);
+      }
+    }
+  });
+  const problems = [...failures.entries()].map(([msg, n]) => `${n}× ${msg}`).join(' · ');
+  if (problems) void vscode.window.showWarningMessage(`FigBridge: ${fresh} preview${fresh === 1 ? '' : 's'} ready. ${problems}`);
+  else void vscode.window.showInformationMessage(`FigBridge: ${fresh} preview${fresh === 1 ? '' : 's'} ready.`);
+}
+
 // ---------------------------------------------------------------- validation & search
 
 async function validateMappings(ws: FigBridgeWorkspace): Promise<void> {
@@ -440,6 +503,10 @@ async function validateMappings(ws: FigBridgeWorkspace): Promise<void> {
         if (!f.apiKey) continue;
         progress.report({ message: f.name ?? f.alias });
         const refs = [...m.refs.values()].filter((r) => r.file === f.alias);
+        if (ws.client.rateLimit(f.apiKey, 1)) {
+          problems.push(`${f.alias}: Figma is rate-limiting this file; try again later`);
+          continue;
+        }
         const meta = await ws.client.fileMeta(f.apiKey);
         if (!meta.ok) {
           problems.push(`${f.alias}: ${describeError(meta.error)}`);

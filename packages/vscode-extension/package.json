@@ -100,6 +100,12 @@
         "category": "FigBridge"
       },
       {
+        "command": "figbridge.renderAll",
+        "title": "Render All Previews",
+        "category": "FigBridge",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "figbridge.refreshAll",
         "title": "Refresh All Cached Previews",
         "category": "FigBridge"
@@ -240,6 +246,11 @@
           "group": "navigation@2"
         },
         {
+          "command": "figbridge.renderAll",
+          "when": "view == figbridge.overview",
+          "group": "navigation@2"
+        },
+        {
           "command": "figbridge.openManifest",
           "when": "view == figbridge.overview",
           "group": "navigation@3"
@@ -364,7 +375,7 @@
         "figbridge.preview.renderOnHover": {
           "type": "boolean",
           "default": true,
-          "description": "Render uncached previews automatically on hover. Turn off on Figma plans with small API quotas (Starter / View seats); previews then render only via Preview or Refresh."
+          "description": "Render uncached previews on hover (one request renders every reference in the same Figma file). Files that Figma reports as Starter plan or low-quota are never rendered on hover; use \"FigBridge: Render All Previews\" for them."
         },
         "figbridge.codeLens.enabled": {
           "type": "boolean",
