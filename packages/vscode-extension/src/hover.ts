@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { PreviewStatus } from '@figbridge/core';
 import type { FigBridgeWorkspace, Located } from './workspace';
-import { commandLink, describeError, escapeMd, relativeTime } from './format';
+import { commandLink, describeError, escapeMd, formatDuration, relativeTime } from './format';
 
 /** Hover over a `@figma ID`: rendered node image, labels, status and actions. */
 export class FigmaHoverProvider implements vscode.HoverProvider {
@@ -26,9 +26,13 @@ export class FigmaHoverProvider implements vscode.HoverProvider {
     const autoRender = config.get<boolean>('preview.renderOnHover', true);
     // Fresh: nothing to do. Error: respect the negative cache (e.g. a rate-limit back-off) until
     // the user refreshes. Loading: a fetch is already running.
-    if (status && hasToken && (status.state === 'stale' || (status.state === 'missing' && autoRender))) {
-      const req = located.previews.request(located.resolved)!;
-      const pending = located.previews.service.ensure(req);
+    const req = located.previews.request(located.resolved);
+    // Starter-plan files get only a few render requests a month: never render them implicitly.
+    const lowQuota = !!req && located.previews.service.isLowQuota(req.apiKey);
+    const allowRender = autoRender && !lowQuota;
+    if (req && status && hasToken && (status.state === 'stale' || (status.state === 'missing' && allowRender))) {
+      // One render request covers this preview and every other preview of the same file.
+      const pending = located.previews.service.ensure(req, { batch: located.previews.batchFor(req), render: allowRender });
       // Wait long enough for a first render to land in this hover, or briefly for a revalidation.
       const waitMs = status.state === 'missing' ? config.get<number>('hover.waitMs', 1500) : 300;
       const winner = await Promise.race([pending, delay(waitMs), cancelled(token)]);
@@ -52,7 +56,7 @@ export class FigmaHoverProvider implements vscode.HoverProvider {
   private async resolvedMarkdown(located: Located, status: PreviewStatus | undefined, hasToken: boolean): Promise<vscode.MarkdownString> {
     const r = located.resolved!;
     const hoverWidth = located.project.manifest?.preview.hoverWidth ?? 360;
-    const md = trusted(['figbridge.open', 'figbridge.preview', 'figbridge.refresh', 'figbridge.setToken', 'figbridge.copyFigmaUrl']);
+    const md = trusted(['figbridge.open', 'figbridge.preview', 'figbridge.refresh', 'figbridge.setToken', 'figbridge.copyFigmaUrl', 'figbridge.renderAll']);
     const title = r.ref.name ?? (located.occurrence?.link ? `Figma node ${r.ref.nodeId}` : r.ref.nodeId);
     md.appendMarkdown(`**${escapeMd(title)}**`);
     if (r.ref.kind) md.appendMarkdown(` · ${escapeMd(r.ref.kind)}`);
@@ -109,6 +113,22 @@ export class FigmaHoverProvider implements vscode.HoverProvider {
         md.appendMarkdown(`$(error) ${escapeMd(describeError(status.error))}${entry ? ' (showing the last image)' : ''}\n\n`);
         break;
     }
+    this.appendQuotaNote(md, located, status);
+  }
+
+  /** On low-quota files, explain why nothing renders on hover and offer the batched command. */
+  private appendQuotaNote(md: vscode.MarkdownString, located: Located, status: PreviewStatus): void {
+    const req = located.previews.request(located.resolved!);
+    if (!req || status.state === 'fresh' || status.state === 'loading') return;
+    const service = located.previews.service;
+    if (!service.isLowQuota(req.apiKey)) return;
+    const q = service.quota(req.apiKey);
+    const plan = q?.planTier === 'starter' ? 'This file is on a Figma Starter plan' : 'Your Figma seat has a low API quota';
+    const until = service.blockedUntil(req.apiKey);
+    const wait = until ? ` Figma allows renders again in ${formatDuration((until - Date.now()) / 1000)}.` : '';
+    md.appendMarkdown(
+      `<sub>$(info) ${plan}: only a few renders a month, so previews aren't rendered on hover.${wait} ${until ? 'Then use' : 'Use'} ${commandLink('Render all previews', 'figbridge.renderAll', [req.apiKey])} — one request for every reference in this file.</sub>\n\n`,
+    );
   }
 
   /**

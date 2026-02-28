@@ -65,7 +65,6 @@ export class ProjectPreviews implements vscode.Disposable {
       persist: config.get<boolean>('preview.persist', true),
       maxTotalBytes: config.get<number>('cache.maxMB', 250) * 1024 * 1024,
     });
-    this.loaded = this.cache.load();
     this.service = new PreviewService({
       client,
       cache: this.cache,
@@ -76,6 +75,25 @@ export class ProjectPreviews implements vscode.Disposable {
       onFileAccess: (alias, state) => project.index.setFileAccess(alias, state),
       onChange: (req) => this.changed.fire(req),
     });
+    this.loaded = this.cache.load().then(() => this.service.restoreBlocks());
+  }
+
+  /** Every preview this project can request (manifest refs and link annotations), deduplicated. */
+  allRequests(): PreviewRequest[] {
+    const out = new Map<string, PreviewRequest>();
+    const keys: RefId[] = [...(this.project.manifest?.refs.keys() ?? [])];
+    for (const o of this.project.index.allOccurrences()) if (o.link) keys.push(o.refId);
+    for (const id of keys) {
+      const resolved = this.project.index.resolve(id);
+      const req = resolved && this.request(resolved);
+      if (req) out.set(`${req.apiKey}|${req.nodeId}|${req.format}|${req.scale}`, req);
+    }
+    return [...out.values()];
+  }
+
+  /** Requests for the other previews of the same Figma file, to render in one batch. */
+  batchFor(req: PreviewRequest): PreviewRequest[] {
+    return this.allRequests().filter((r) => r.apiKey === req.apiKey && r.nodeId !== req.nodeId);
   }
 
   ready(): Promise<void> {
