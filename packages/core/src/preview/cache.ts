@@ -40,9 +40,21 @@ export interface FailureEntry extends PreviewKeyParts {
   retryAfter: number;
 }
 
+/** What Figma's 429 responses told us about a file's render quota. */
+export interface QuotaState {
+  /** Starter-plan file or View/Collab seat: only a handful of renders per month. */
+  low: boolean;
+  planTier?: string;
+  rateLimitType?: string;
+  /** Epoch ms until which Figma asked us not to call the render endpoint. */
+  blockedUntil?: number;
+  updatedAt: number;
+}
+
 interface CacheIndexFile {
   v: number;
   entries: PreviewEntry[];
+  quota?: Record<string, QuotaState>;
 }
 
 export function previewKey(p: PreviewKeyParts): string {
@@ -84,6 +96,7 @@ export class PreviewCache {
   private readonly entries = new Map<string, PreviewEntry>();
   private readonly memory = new Map<string, Uint8Array>();
   private readonly failures = new Map<string, FailureEntry>();
+  private readonly quotas = new Map<string, QuotaState>();
   private readonly maxTotalBytes: number;
   private readonly persist: boolean;
   private readonly now: () => number;
@@ -105,12 +118,26 @@ export class PreviewCache {
     try {
       const parsed = JSON.parse(await readFile(join(this.options.dir, 'cache-v1.json'), 'utf8')) as CacheIndexFile;
       if (parsed.v !== CACHE_INDEX_VERSION || !Array.isArray(parsed.entries)) return;
+      for (const [apiKey, q] of Object.entries(parsed.quota ?? {})) if (q && typeof q.low === 'boolean') this.quotas.set(apiKey, q);
       for (const e of parsed.entries)
         if (typeof e.key === 'string' && /^[0-9a-f]{32}\.(png|jpg)$/.test(e.fileName) && existsSync(join(this.options.dir, e.fileName)))
           this.entries.set(e.key, e);
     } catch {
       /* missing or corrupt index: start empty; orphaned files are overwritten or cleared later */
     }
+  }
+
+  quota(apiKey: string): QuotaState | undefined {
+    return this.quotas.get(apiKey);
+  }
+
+  allQuotas(): ReadonlyMap<string, QuotaState> {
+    return this.quotas;
+  }
+
+  setQuota(apiKey: string, q: QuotaState): void {
+    this.quotas.set(apiKey, q);
+    this.scheduleSave();
   }
 
   get(parts: PreviewKeyParts): PreviewEntry | undefined {
@@ -260,7 +287,7 @@ export class PreviewCache {
       this.saveTimer = undefined;
     }
     await mkdir(this.options.dir, { recursive: true, mode: 0o700 });
-    const data: CacheIndexFile = { v: CACHE_INDEX_VERSION, entries: [...this.entries.values()] };
+    const data: CacheIndexFile = { v: CACHE_INDEX_VERSION, entries: [...this.entries.values()], quota: Object.fromEntries(this.quotas) };
     const tmp = join(this.options.dir, `.${randomUUID()}.tmp`);
     await writeFile(tmp, JSON.stringify(data), { mode: 0o600 });
     await rename(tmp, join(this.options.dir, 'cache-v1.json'));
