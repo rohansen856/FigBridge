@@ -44,7 +44,12 @@ export type FetchLike = (url: string, init: { method?: string; headers?: Record<
   arrayBuffer(): Promise<ArrayBuffer>;
 }>;
 
+/** Figma rate-limit tier of an endpoint (see developers.figma.com/docs/rest-api/rate-limits). */
+export type RateTier = 1 | 2 | 3;
+
 export interface FigmaClientOptions {
+  /** Called when Figma returns 429, e.g. to persist the block across sessions. */
+  onRateLimit?: (apiKey: string, tier: RateTier, until: number, error: FigmaError) => void;
   /** Returns the PAT, or undefined when none is configured. Called per request; never cached here. */
   getToken: () => Promise<string | undefined>;
   fetch?: FetchLike;
@@ -82,6 +87,7 @@ export class FigmaClient {
   async fileMeta(apiKey: string, signal?: AbortSignal): Promise<Result<FileMeta>> {
     const r = await this.getJson<{ file?: { name?: string; version?: string; last_touched_at?: string; role?: string } }>(
       apiKey,
+      3,
       `/v1/files/${encodeURIComponent(apiKey)}/meta`,
       signal,
     );
@@ -97,6 +103,7 @@ export class FigmaClient {
     for (const chunk of chunks(ids, MAX_IDS_PER_CALL)) {
       const r = await this.getJson<{ nodes?: Record<string, { document?: RawNode } | null> }>(
         apiKey,
+        1,
         `/v1/files/${encodeURIComponent(apiKey)}/nodes?ids=${encodeURIComponent(chunk.join(','))}&depth=1`,
         signal,
       );
@@ -132,6 +139,7 @@ export class FigmaClient {
     for (const chunk of chunks(ids, MAX_IDS_PER_CALL)) {
       const r = await this.getJson<{ err?: string | null; images?: Record<string, string | null> }>(
         apiKey,
+        1,
         `/v1/images/${encodeURIComponent(apiKey)}?ids=${encodeURIComponent(chunk.join(','))}&format=${opts.format}&scale=${scale}`,
         signal,
       );
@@ -164,23 +172,31 @@ export class FigmaClient {
     return { ok: true, value: { bytes, contentType } };
   }
 
-  /** Current rate-limit block for an API key, if any. */
-  rateLimit(apiKey: string): FigmaError | undefined {
-    const b = this.blockedUntil.get(apiKey);
+  /**
+   * Current rate-limit block for an API key and endpoint tier (Figma limits each tier
+   * separately: renders and node reads are Tier 1, file metadata is Tier 3).
+   */
+  rateLimit(apiKey: string, tier: RateTier = 1): FigmaError | undefined {
+    const b = this.blockedUntil.get(`${apiKey}|${tier}`);
     return b && b.until > this.now() ? b.error : undefined;
   }
 
-  private async getJson<T>(apiKey: string, path: string, signal?: AbortSignal): Promise<Result<T>> {
+  /** Restores a block saved from an earlier session, so a reload doesn't re-hit a 429. */
+  restoreBlock(apiKey: string, tier: RateTier, until: number, error: FigmaError): void {
+    if (until > this.now()) this.blockedUntil.set(`${apiKey}|${tier}`, { until, error });
+  }
+
+  private async getJson<T>(apiKey: string, tier: RateTier, path: string, signal?: AbortSignal): Promise<Result<T>> {
     const existing = this.inFlight.get(path);
     if (existing) return existing as Promise<Result<T>>;
-    const p = this.getJsonUncoalesced<T>(apiKey, path, signal).finally(() => this.inFlight.delete(path));
+    const p = this.getJsonUncoalesced<T>(apiKey, tier, path, signal).finally(() => this.inFlight.delete(path));
     this.inFlight.set(path, p as Promise<Result<unknown>>);
     return p;
   }
 
-  private async getJsonUncoalesced<T>(apiKey: string, path: string, signal?: AbortSignal): Promise<Result<T>> {
-    const blocked = this.rateLimit(apiKey);
-    if (blocked) return { ok: false, error: { ...blocked, retryAfterSec: Math.ceil((this.blockedUntil.get(apiKey)!.until - this.now()) / 1000) } };
+  private async getJsonUncoalesced<T>(apiKey: string, tier: RateTier, path: string, signal?: AbortSignal): Promise<Result<T>> {
+    const blocked = this.rateLimit(apiKey, tier);
+    if (blocked) return { ok: false, error: { ...blocked, retryAfterSec: Math.ceil((this.blockedUntil.get(`${apiKey}|${tier}`)!.until - this.now()) / 1000) } };
     const token = await this.options.getToken();
     if (!token) return { ok: false, error: { code: 'PAT_NOT_CONFIGURED', message: 'No Figma access token is configured.' } };
     const res = await this.send(FIGMA_API_ORIGIN + path, { 'X-Figma-Token': token }, signal);
@@ -194,7 +210,11 @@ export class FigmaClient {
       }
     }
     const error = await httpError(response);
-    if (error.code === 'RATE_LIMITED') this.blockedUntil.set(apiKey, { until: this.now() + (error.retryAfterSec ?? 60) * 1000, error });
+    if (error.code === 'RATE_LIMITED') {
+      const until = this.now() + (error.retryAfterSec ?? 60) * 1000;
+      this.blockedUntil.set(`${apiKey}|${tier}`, { until, error });
+      this.options.onRateLimit?.(apiKey, tier, until, error);
+    }
     return { ok: false, error };
   }
 
