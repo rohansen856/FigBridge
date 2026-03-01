@@ -2,8 +2,9 @@ import * as vscode from 'vscode';
 import type { AnnotationOccurrence, ManifestRef, Problem, ProblemKind, RefId, SourceTreeNode } from '@figbridge/core';
 import type { FigBridgeWorkspace } from './workspace';
 import type { Project } from './project';
+import type { ProjectPreviews } from './figma';
 import type { ActivityLog, ActivityRecord } from './activity';
-import { describeError, relativeTime } from './format';
+import { describeError, formatDuration, relativeTime } from './format';
 
 /** Common base: every node knows how to render itself and its children. */
 export abstract class Node {
@@ -112,14 +113,14 @@ export class OverviewProvider extends BaseProvider {
     const projects = this.ws.active();
     if (!projects.length) return [];
     const multi = projects.length > 1;
-    const nodes = projects.flatMap(({ project }) => {
-      const rows = this.projectRows(project);
+    const nodes = projects.flatMap(({ project, previews }) => {
+      const rows = this.projectRows(project, previews);
       return multi ? [new Group(item(project.name, { expanded: true, iconPath: icon('root-folder') }), () => rows)] : rows;
     });
     return nodes;
   }
 
-  private projectRows(project: Project): Node[] {
+  private projectRows(project: Project, previews: ProjectPreviews): Node[] {
     const h = project.index.health();
     const m = project.manifest;
     const errors = project.manifestDiagnostics().filter((d) => d.severity === 'error').length;
@@ -173,9 +174,12 @@ export class OverviewProvider extends BaseProvider {
         new Group(item('Figma files', { expanded: files.length <= 3, iconPath: icon('file-media'), description: String(files.length) }), () =>
           files.map((f) => {
             const access = project.index.fileAccess(f.alias);
+            const quota = f.apiKey && previews.service.isLowQuota(f.apiKey) ? previews.service.quota(f.apiKey) : undefined;
+            const until = f.apiKey ? previews.service.blockedUntil(f.apiKey) : undefined;
+            const quotaLabel = quota ? ` · ${quota.planTier === 'starter' ? 'Starter plan' : 'low API quota'}${until ? `, renders blocked ${formatDuration((until - Date.now()) / 1000)}` : ''}` : '';
             const n = new Leaf(
               item(f.name ?? f.alias, {
-                description: f.state !== 'ok' ? (f.state === 'env-missing' ? `needs ${f.envVar}` : 'invalid URL') : access === 'unknown' ? f.alias : `${f.alias} · ${access}`,
+                description: (f.state !== 'ok' ? (f.state === 'env-missing' ? `needs ${f.envVar}` : 'invalid URL') : access === 'unknown' ? f.alias : `${f.alias} · ${access}`) + quotaLabel,
                 tooltip: f.baseUrl ?? f.rawUrl ?? '',
                 iconPath: icon(f.state === 'ok' && access !== 'denied' && access !== 'missing' ? 'file-media' : 'warning'),
                 contextValue: 'figmaFile',
