@@ -62,6 +62,26 @@ suite('FigBridge extension', () => {
     assert.match(text, /to refresh the preview/);
   });
 
+  test('a Starter-plan file is not rendered on hover and offers Render all previews', async () => {
+    const entry = api.workspace.forUri(vscode.Uri.joinPath(root(), 'figma.design.yaml'));
+    const key = 'aHvbMOTkjQ3dmWBoWbMuv2';
+    entry.previews.cache.setQuota(key, { low: true, planTier: 'starter', blockedUntil: Date.now() + 3 * 86400_000, updatedAt: Date.now() });
+    await api.workspace.tokens.set('figd_fake_token_for_tests_only');
+    try {
+      const before = api.workspace.client.requestCount;
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root(), 'web/src/Menu.tsx'));
+      const line = doc.getText().split('\n').findIndex((l) => l.includes('@figma K4M6P8R0T2V4') && !l.includes('{/*'));
+      const text = hoverText(await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', doc.uri, new vscode.Position(line, 14)));
+      assert.match(text, /Starter plan/);
+      assert.match(text, /command:figbridge\.renderAll/);
+      assert.match(text, /renders again in 3 d|renders again in 7\d h/);
+      assert.strictEqual(api.workspace.client.requestCount, before, 'no Figma request on hover');
+    } finally {
+      await api.workspace.tokens.clear();
+      entry.previews.cache.setQuota(key, { low: false, updatedAt: Date.now() });
+    }
+  });
+
   test('hover on an unresolved ID explains it', async () => {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root(), 'lib/widgets/pattern.dart'));
     const line = doc.getText().split('\n').findIndex((l) => l.includes('ZZZZZZZZZZZ9'));
