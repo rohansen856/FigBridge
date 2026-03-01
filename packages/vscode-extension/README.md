@@ -107,7 +107,15 @@ settings:
 - **Cost of a render:** an uncached render calls Figma's render API and usually takes **5–10 seconds**. The hover shows "Rendering…" and the image appears the next time you hover. **FigBridge: Preview Design** opens a larger view that updates itself.
 - **Where images are cached:** in VS Code's extension storage, never in your repository. The default cap is 250 MB, controlled by `figbridge.cache.maxMB`. Set `figbridge.preview.persist` to `false` to keep images in memory only.
 - **Staying current:** after `ttlMinutes`, FigBridge first checks the file's version with a cheap metadata call. It re-renders only if the file changed.
-- **Rate limits:** Figma limits the render and node APIs per seat. View and Collab seats are allowed very few requests. Dev and Full seats get about 10–20 per minute, depending on plan. FigBridge never renders during scanning, merges duplicate requests, and pauses when Figma says to.
+- **Rate limits.** Figma limits renders based on the plan that owns the file:
+  - Starter-plan files, and View or Collab seats: only a few render requests per month.
+  - Dev and Full seats on paid plans: about 10–20 per minute.
+
+  Logging in with OAuth wouldn't raise these limits. FigBridge keeps its usage low:
+  - **Batched renders.** One request renders every reference in a Figma file, up to 50 nodes, so the first hover in a file prepares all of its previews.
+  - **Starter-file detection.** When Figma reports a Starter-plan or low-quota file, FigBridge stops rendering on hover and shows when renders are allowed again. **FigBridge: Render All Previews** then renders everything with one request per file.
+  - **Cheap revalidation.** Previews are checked through the file-metadata endpoint, which has a separate, larger budget, and are re-rendered only when the file changed.
+  - **No rendering while scanning.** Duplicate requests are merged, and FigBridge waits as long as Figma asks after a 429, even across restarts.
 
 ## Claude Code integration (optional)
 
@@ -139,7 +147,7 @@ Before replacing UI that already exists, it asks: overwrite, skip, overwrite all
 ## Commands
 
 **Navigation and previews:**
-- Open in Figma · Preview Design · Refresh Preview · Refresh Previews for Figma File · Refresh All Cached Previews
+- Open in Figma · Preview Design · Render All Previews · Refresh Preview · Refresh Previews for Figma File · Refresh All Cached Previews
 - Validate Mappings Against Figma · Rescan Workspace
 
 **Mappings:**
