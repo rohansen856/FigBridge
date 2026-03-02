@@ -419,6 +419,59 @@
         "fileMatch": "figma.design.yaml",
         "url": "./schemas/figma.design.schema.json"
       }
+    ],
+    "walkthroughs": [
+      {
+        "id": "figbridge.gettingStarted",
+        "title": "Get started with FigBridge",
+        "description": "Link your code to Figma designs and see them on hover.",
+        "steps": [
+          {
+            "id": "manifest",
+            "title": "Create a manifest",
+            "description": "Map short IDs to Figma nodes in a committed figma.design.yaml.\n[Create Manifest](command:figbridge.createManifest)",
+            "media": {
+              "markdown": "media/walkthrough/manifest.md"
+            },
+            "completionEvents": [
+              "onCommand:figbridge.createManifest"
+            ]
+          },
+          {
+            "id": "token",
+            "title": "Connect your Figma account",
+            "description": "Add a read-only personal access token so FigBridge can render previews.\n[Set Figma Access Token](command:figbridge.setToken)",
+            "media": {
+              "markdown": "media/walkthrough/token.md"
+            },
+            "completionEvents": [
+              "onCommand:figbridge.setToken"
+            ]
+          },
+          {
+            "id": "annotate",
+            "title": "Annotate a component",
+            "description": "Paste a Figma link to insert an @figma reference above your code.\n[Insert Figma Reference](command:figbridge.insertReference)",
+            "media": {
+              "markdown": "media/walkthrough/annotate.md"
+            },
+            "completionEvents": [
+              "onCommand:figbridge.insertReference"
+            ]
+          },
+          {
+            "id": "claude",
+            "title": "Use it from Claude Code",
+            "description": "Optional: let Claude resolve references and build UI with /figbridge.\n[Set Up Claude Code Integration](command:figbridge.setupClaude)",
+            "media": {
+              "markdown": "media/walkthrough/claude.md"
+            },
+            "completionEvents": [
+              "onCommand:figbridge.setupClaude"
+            ]
+          }
+        ]
+      }
     ]
   },
   "scripts": {
