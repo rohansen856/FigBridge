@@ -1,1 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="8" height="8" rx="1.5"/><rect x="13.5" y="12" width="8" height="8" rx="1.5"/><path d="M10.5 8h3a2 2 0 0 1 2 2v2"/><path d="M5 15.5l-2 2 2 2"/><path d="M9 15.5l2 2-2 2"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -490 2416 2416" fill="currentColor">
+  <!-- FigBridge logo as a single-colour silhouette for the Activity Bar (VS Code tints it). -->
+  <path d="M8 793H2408V843C2408 953 2318 1043 2208 1043H208C98 1043 8 953 8 843Z"/>
+  <path d="M640 1000V1320C640 1380 592 1427 532 1427H480C420 1427 372 1380 372 1320V1000Z"/>
+  <path d="M1340 1000V1320C1340 1380 1292 1427 1232 1427H1180C1120 1427 1072 1380 1072 1320V1000Z"/>
+  <path d="M2040 1000V1320C2040 1380 1992 1427 1932 1427H1880C1820 1427 1772 1380 1772 1320V1000Z"/>
+  <rect x="420" y="0" width="172" height="840" rx="86"/>
+  <rect x="1824" y="0" width="172" height="840" rx="86"/>
+  <g fill="none" stroke="currentColor" stroke-width="130" stroke-linecap="round">
+    <path d="M520 170C1104 440 1410 436 1900 170"/>
+    <path d="M470 220L190 790"/>
+    <path d="M1946 220L2226 790"/>
+  </g>
+</svg>

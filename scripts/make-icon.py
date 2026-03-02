@@ -1,19 +1,19 @@
-"""Draws the 256x256 extension icon (media/icon.png): a frame linked to a code bracket."""
+"""Builds the extension icon (media/icon.png, 256x256) from the brand logo.
+
+The logo is wide (2416x1435) with black outlines, so it is centred on a white rounded square:
+the outlines stay visible on dark Marketplace and Extensions-view backgrounds.
+Usage: python3 make-icon.py media/brand/logo.png media/icon.png
+"""
 import sys
 from PIL import Image, ImageDraw
 
-S = 4  # supersample
-W = 256 * S
-img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
-d = ImageDraw.Draw(img)
-d.rounded_rectangle([0, 0, W - 1, W - 1], radius=56 * S, fill=(30, 30, 46, 255))
-# design frame (top-left) and code panel (bottom-right)
-d.rounded_rectangle([40 * S, 40 * S, 128 * S, 128 * S], radius=14 * S, outline=(162, 89, 255, 255), width=12 * S)
-d.rounded_rectangle([128 * S, 128 * S, 216 * S, 216 * S], radius=14 * S, fill=(10, 207, 131, 255))
-# link from frame to panel
-d.line([(128 * S, 84 * S), (172 * S, 84 * S), (172 * S, 128 * S)], fill=(242, 78, 30, 255), width=12 * S, joint="curve")
-# </> on the code panel
-c = (30, 30, 46, 255)
-d.line([(160 * S, 156 * S), (146 * S, 172 * S), (160 * S, 188 * S)], fill=c, width=8 * S, joint="curve")
-d.line([(184 * S, 156 * S), (198 * S, 172 * S), (184 * S, 188 * S)], fill=c, width=8 * S, joint="curve")
-img.resize((256, 256), Image.LANCZOS).save(sys.argv[1])
+SIZE, S = 256, 4  # output size, supersampling
+src, out = sys.argv[1], sys.argv[2]
+W = SIZE * S
+canvas = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+ImageDraw.Draw(canvas).rounded_rectangle([0, 0, W - 1, W - 1], radius=56 * S, fill=(255, 255, 255, 255))
+logo = Image.open(src).convert("RGBA")
+target_w = int(W * 0.80)
+logo = logo.resize((target_w, round(logo.height * target_w / logo.width)), Image.LANCZOS)
+canvas.alpha_composite(logo, ((W - logo.width) // 2, (W - logo.height) // 2))
+canvas.resize((SIZE, SIZE), Image.LANCZOS).save(out)

@@ -1,0 +1,11 @@
+<svg width="2416" height="1435" viewBox="0 0 2416 1435" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M623 1043V1335C623 1385.81 581.81 1427 531 1427H481C430.19 1427 389 1385.81 389 1335V1043H623Z" fill="#00E080" stroke="black" stroke-width="16"/>
+<path d="M1323 1043V1335C1323 1385.81 1281.81 1427 1231 1427H1181C1130.19 1427 1089 1385.81 1089 1335V1043H1323Z" fill="#00E080" stroke="black" stroke-width="16"/>
+<path d="M2023 1043V1335C2023 1385.81 1981.81 1427 1931 1427H1881C1830.19 1427 1789 1385.81 1789 1335V1043H2023Z" fill="#00E080" stroke="black" stroke-width="16"/>
+<path d="M511 156C1103.89 427.363 1409.73 423.295 1911 156" stroke="black" stroke-width="20"/>
+<line x1="196.957" y1="797.731" x2="501.957" y2="151.731" stroke="black" stroke-width="20"/>
+<line y1="-10" x2="714.382" y2="-10" transform="matrix(-0.426943 -0.904279 -0.904279 0.426943 2210 802)" stroke="black" stroke-width="20"/>
+<path d="M506 8C529.196 8 548 26.804 548 50V792H464V50C464 26.804 482.804 8 506 8Z" fill="#BB00FF" stroke="black" stroke-width="16"/>
+<path d="M1910 9C1933.2 9 1952 27.804 1952 51V793H1868V51C1868 27.804 1886.8 9 1910 9Z" fill="#BB00FF" stroke="black" stroke-width="16"/>
+<path d="M8 793H2408V843C2408 953.457 2318.46 1043 2208 1043H208C97.543 1043 8 953.457 8 843V793Z" fill="#00B3FF" stroke="black" stroke-width="16"/>
+</svg>
