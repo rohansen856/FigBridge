@@ -1,3 +1,5 @@
+<p align="center"><img src="packages/vscode-extension/media/brand/logo.png" alt="FigBridge logo: a suspension bridge" width="240"></p>
+
 # FigBridge
 
 Connects source code, Figma designs and Claude Code through short, stable IDs in code comments:

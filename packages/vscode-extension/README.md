@@ -1,3 +1,5 @@
+<p align="center"><img src="media/brand/logo.png" alt="FigBridge logo: a suspension bridge" width="280"></p>
+
 # FigBridge
 
 Link source code to the exact Figma frame or component it implements, using short, stable IDs in ordinary comments.
