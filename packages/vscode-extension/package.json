@@ -1,7 +1,7 @@
 {
   "name": "figbridge",
   "displayName": "FigBridge",
-  "description": "Link source code to exact Figma nodes with short @figma IDs: hover previews, navigation, mapping health and Claude Code integration.",
+  "description": "Link code to exact Figma frames with short @figma IDs or links: hover previews, open in Figma, mapping health, and Claude Code integration.",
   "version": "0.1.2",
   "publisher": "figbridge",
   "license": "MIT",
@@ -16,11 +16,20 @@
   "keywords": [
     "figma",
     "design",
+    "design-to-code",
+    "hover",
+    "preview",
     "flutter",
     "react",
-    "claude"
+    "nextjs",
+    "claude",
+    "mcp"
   ],
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#EAF7FF",
+    "theme": "light"
+  },
   "main": "./dist/extension.js",
   "activationEvents": [
     "workspaceContains:**/figma.design.yaml",
@@ -480,7 +489,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "node esbuild.mjs && tsc -p tsconfig.test.json && vscode-test",
-    "package": "node esbuild.mjs --production && vsce package --no-dependencies --out figbridge.vsix"
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies --no-rewrite-relative-links --out figbridge.vsix"
   },
   "dependencies": {
     "@figbridge/core": "workspace:*",
@@ -497,5 +506,11 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/figbridge/figbridge"
-  }
+  },
+  "homepage": "https://github.com/figbridge/figbridge#readme",
+  "bugs": {
+    "url": "https://github.com/figbridge/figbridge/issues"
+  },
+  "qna": false,
+  "preview": true
 }
