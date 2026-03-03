@@ -123,7 +123,8 @@ suite('FigBridge extension', () => {
     const editor = await vscode.window.showTextDocument(doc);
     await editor.edit((e) => e.insert(new vscode.Position(0, 0), '// @figma Q1R2S3T4V5W6\nexport const Splash = () => null;\n'));
     await until(() => project().index.health().unusedMappings === 0);
-    await vscode.commands.executeCommand('undo');
+    // Revert through the same editor (not the focus-dependent `undo` command).
+    await editor.edit((e) => e.delete(new vscode.Range(0, 0, 2, 0)));
     await until(() => project().index.health().unusedMappings === 1);
   });
 
@@ -134,7 +135,7 @@ suite('FigBridge extension', () => {
     await until(() => project().state === 'invalid');
     assert.ok(project().manifest, 'last-known-good manifest retained');
     assert.ok(project().index.resolve('F7KQ9M2X4P6D'));
-    await vscode.commands.executeCommand('undo');
+    await editor.edit((e) => e.delete(new vscode.Range(0, 0, 1, 0)));
     await until(() => project().state === 'ok');
   });
 
