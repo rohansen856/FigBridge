@@ -138,7 +138,8 @@ describe('MCP server started above nested manifests', () => {
 
 function runHook(payload: string, env: Record<string, string>): Promise<{ code: number | null; stdout: string }> {
   return new Promise((resolve) => {
-    const p = spawn(process.execPath, [BIN, 'hook'], { env: { PATH: process.env.PATH ?? '', ...env } });
+    const base = { PATH: process.env.PATH ?? '', ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}) };
+    const p = spawn(process.execPath, [BIN, 'hook'], { env: { ...base, ...env } });
     let stdout = '';
     p.stdout.on('data', (d) => (stdout += String(d)));
     p.on('close', (code) => resolve({ code, stdout }));
@@ -146,13 +147,21 @@ function runHook(payload: string, env: Record<string, string>): Promise<{ code: 
   });
 }
 
+/** Environment that pins the per-user state directory on every OS, and the directory it yields. */
+function isolatedState(name: string): { env: Record<string, string>; root: string } {
+  const base = join(work, name);
+  const env = { XDG_STATE_HOME: base, LOCALAPPDATA: base, HOME: base, USERPROFILE: base };
+  const root = process.platform === 'darwin' ? join(base, 'Library', 'Application Support', 'figbridge') : join(base, 'figbridge');
+  return { env, root };
+}
+
 describe('hook (bundled)', () => {
   it('writes one sanitised event to the per-user spool and prints nothing', async () => {
-    const state = join(work, 'state');
+    const state = isolatedState('state');
     const payload = readFileSync(join(FIXTURES, 'claude-hooks/failure.claude-ai.use_figma.json'), 'utf8');
-    const r = await runHook(payload, { CLAUDE_PROJECT_DIR: demo, XDG_STATE_HOME: state, HOME: work });
+    const r = await runHook(payload, { CLAUDE_PROJECT_DIR: demo, ...state.env });
     expect(r).toEqual({ code: 0, stdout: '' });
-    const spoolRoot = join(state, 'figbridge', 'spool');
+    const spoolRoot = join(state.root, 'spool');
     const [dir] = readdirSync(spoolRoot);
     const files = readdirSync(join(spoolRoot, dir!));
     expect(files).toHaveLength(1);
@@ -166,13 +175,13 @@ describe('hook (bundled)', () => {
     ['non-figma tool', JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'ls' } })],
     ['empty', ''],
   ])('exits 0 silently on %s', async (_l, payload) => {
-    expect(await runHook(payload, { CLAUDE_PROJECT_DIR: demo, XDG_STATE_HOME: join(work, 'state2'), HOME: work })).toEqual({ code: 0, stdout: '' });
+    expect(await runHook(payload, { CLAUDE_PROJECT_DIR: demo, ...isolatedState('state2').env })).toEqual({ code: 0, stdout: '' });
   });
 
   it('does nothing outside a FigBridge project', async () => {
     const payload = readFileSync(join(FIXTURES, 'claude-hooks/success.plugin.use_figma.json'), 'utf8');
-    const state = join(work, 'state3');
-    expect(await runHook(payload, { CLAUDE_PROJECT_DIR: tmpdir(), XDG_STATE_HOME: state, HOME: work })).toEqual({ code: 0, stdout: '' });
-    expect(() => readdirSync(join(state, 'figbridge', 'spool'))).toThrow();
+    const state = isolatedState('state3');
+    expect(await runHook(payload, { CLAUDE_PROJECT_DIR: tmpdir(), ...state.env })).toEqual({ code: 0, stdout: '' });
+    expect(() => readdirSync(join(state.root, 'spool'))).toThrow();
   });
 });
