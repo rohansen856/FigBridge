@@ -259,18 +259,23 @@ function resolveTarget(comment: Node, rules: GrammarRules, lines: LineIndex): { 
   if (parent && rules.transparentContainers.has(parent.type) && parent.namedChildCount === 1) anchor = parent;
 
   // Trailing comment on the same line as the previous statement annotates that statement.
-  const prev = anchor.previousNamedSibling;
+  // With CRLF line endings, the indentation before a JSX comment is a whitespace-only text node.
+  let prev = anchor.previousNamedSibling;
+  while (prev && isBlank(prev, rules)) prev = prev.previousNamedSibling;
   if (prev && !rules.skipTypes.has(prev.type) && prev.endPosition.row === comment.startPosition.row) {
     return classify(prev, rules, lines);
   }
 
   let next = anchor.nextNamedSibling;
-  while (next && (rules.skipTypes.has(next.type) || (rules.ignorableTypes.has(next.type) && next.text.trim() === '')))
-    next = next.nextNamedSibling;
+  while (next && (rules.skipTypes.has(next.type) || isBlank(next, rules))) next = next.nextNamedSibling;
   if (!next) return { attachment: 'file' };
   // Allow at most one blank line between the comment (or skipped decorators) and the target.
   if (next.startPosition.row - comment.endPosition.row > 2 && !hasOnlySkippedBetween(comment, next, rules)) return { attachment: 'file' };
   return classify(next, rules, lines);
+}
+
+function isBlank(node: Node, rules: GrammarRules): boolean {
+  return rules.ignorableTypes.has(node.type) && node.text.trim() === '';
 }
 
 function hasOnlySkippedBetween(from: Node, to: Node, rules: GrammarRules): boolean {

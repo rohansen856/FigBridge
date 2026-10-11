@@ -88,6 +88,14 @@ describe('TSX adapter', () => {
     expect(r.diagnostics).toEqual([]);
   });
 
+  it('gives the same result for CRLF line endings', () => {
+    for (const name of ['components.tsx', 'widgets.dart']) {
+      const text = readFileSync(join(FIXTURES, name), 'utf8');
+      const crlf = scanner.scan({ relPath: `src/${name}`, text: text.replace(/\n/g, '\r\n') });
+      expect(summarize(crlf)).toEqual(summarize(scanFixture(name)));
+    }
+  });
+
   it('reports exact ID ranges', () => {
     const r = scanFixture('components.tsx');
     const first = r.occurrences[0]!;
