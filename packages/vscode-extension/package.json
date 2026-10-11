@@ -3,7 +3,7 @@
   "displayName": "FigBridge",
   "description": "Link code to exact Figma frames with short @figma IDs or links: hover previews, open in Figma, mapping health, and Claude Code integration.",
   "version": "0.1.3",
-  "publisher": "figbridge",
+  "publisher": "rohansen856",
   "license": "MIT",
   "private": true,
   "engines": {
@@ -80,7 +80,7 @@
     "viewsWelcome": [
       {
         "view": "figbridge.overview",
-        "contents": "No figma.design.yaml manifest was found in this workspace.\n[Create Manifest](command:figbridge.createManifest)\nLearn more in the [README](https://github.com/figbridge/figbridge#readme).",
+        "contents": "No figma.design.yaml manifest was found in this workspace.\n[Create Manifest](command:figbridge.createManifest)\nLearn more in the [README](https://github.com/rohansen856/FigBridge#readme).",
         "when": "figbridge.state == 'no-manifest'"
       }
     ],
@@ -505,11 +505,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/figbridge/figbridge"
+    "url": "https://github.com/rohansen856/FigBridge",
+    "directory": "packages/vscode-extension"
   },
-  "homepage": "https://github.com/figbridge/figbridge#readme",
+  "homepage": "https://github.com/rohansen856/FigBridge#readme",
   "bugs": {
-    "url": "https://github.com/figbridge/figbridge/issues"
+    "url": "https://github.com/rohansen856/FigBridge/issues"
   },
   "qna": false,
   "preview": true

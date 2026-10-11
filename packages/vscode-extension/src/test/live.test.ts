@@ -8,14 +8,14 @@ const envFile = process.env.FIGMA_LIVE_ENV;
 
 (envFile ? suite : suite.skip)('FigBridge live (Figma API)', () => {
   suiteTeardown(async () => {
-    const api: any = await vscode.extensions.getExtension('figbridge.figbridge')!.activate();
+    const api: any = await vscode.extensions.getExtension('rohansen856.figbridge')!.activate();
     await api.workspace.tokens.clear();
   });
   test('hover renders the exact node image from cache after the first fetch', async function () {
     this.timeout(90000);
     const line = readFileSync(envFile!, 'utf8').split(/\r?\n/).find((l) => l.startsWith('FIGMA_ACCESS_TOKEN='))!;
     const token = line.slice('FIGMA_ACCESS_TOKEN='.length).trim().replace(/^(['"])(.*)\1$/, '$2');
-    const api: any = await vscode.extensions.getExtension('figbridge.figbridge')!.activate();
+    const api: any = await vscode.extensions.getExtension('rohansen856.figbridge')!.activate();
     await api.workspace.tokens.set(token);
     const root = vscode.workspace.workspaceFolders![0]!.uri;
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, 'lib/screens/order_details.dart'));

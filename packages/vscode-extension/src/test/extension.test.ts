@@ -24,7 +24,7 @@ function hoverText(hovers: vscode.Hover[]): string {
 
 suite('FigBridge extension', () => {
   suiteSetup(async () => {
-    const ext = vscode.extensions.getExtension('figbridge.figbridge')!;
+    const ext = vscode.extensions.getExtension('rohansen856.figbridge')!;
     api = await ext.activate();
     await until(() => project().index.scanState === 'complete');
   });
