@@ -36,6 +36,9 @@ export class Project implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
+  private readonly layout = new vscode.EventEmitter<vscode.Uri>();
+  /** Fires when a `figma.design.yaml` other than this project's own appears or disappears below the root. */
+  readonly onDidChangeLayout = this.layout.event;
   private manifestTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly fileTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private scanToken: vscode.CancellationTokenSource | undefined;
@@ -96,8 +99,12 @@ export class Project implements vscode.Disposable {
     manifestWatcher.onDidDelete(() => this.scheduleManifestReload());
     const sourceWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.root, '**/*'));
     sourceWatcher.onDidChange((u) => this.scheduleFile(u));
-    sourceWatcher.onDidCreate((u) => this.scheduleFile(u));
+    sourceWatcher.onDidCreate((u) => {
+      this.checkLayout(u);
+      this.scheduleFile(u);
+    });
     sourceWatcher.onDidDelete((u) => {
+      this.checkLayout(u);
       const rel = this.relPath(u);
       if (!rel) return;
       // A deleted directory: drop every indexed file beneath it.
@@ -115,6 +122,11 @@ export class Project implements vscode.Disposable {
       vscode.workspace.onDidCloseTextDocument((d) => this.scheduleFile(d.uri)),
     );
     await this.reloadManifest(true);
+  }
+
+  /** Backs up the workspace-wide manifest watcher, whose events can be lost for new directories. */
+  private checkLayout(uri: vscode.Uri): void {
+    if (uri.path.split('/').pop() === MANIFEST_FILENAME && uri.toString() !== this.manifestUri.toString()) this.layout.fire(uri);
   }
 
   private scheduleManifestReload(): void {
@@ -251,5 +263,6 @@ export class Project implements vscode.Disposable {
     for (const t of this.fileTimers.values()) clearTimeout(t);
     for (const d of this.disposables) d.dispose();
     this.changed.dispose();
+    this.layout.dispose();
   }
 }

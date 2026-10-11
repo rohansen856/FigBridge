@@ -12,6 +12,7 @@ export interface Located {
   resolved?: ResolvedRef;
 }
 
+const RELAYOUT_DEBOUNCE_MS = 200;
 const DISCOVERY_EXCLUDE = '{**/node_modules/**,**/.git/**,**/build/**,**/dist/**,**/out/**,**/.dart_tool/**,**/.next/**,**/Pods/**}';
 
 /**
@@ -48,31 +49,48 @@ export class FigBridgeWorkspace implements vscode.Disposable {
     await Promise.all((vscode.workspace.workspaceFolders ?? []).map((f) => this.add(f)));
     // A manifest appearing or disappearing anywhere changes the project layout.
     const watcher = vscode.workspace.createFileSystemWatcher(`**/${MANIFEST_FILENAME}`, false, true, false);
-    const relayout = (uri: vscode.Uri) => {
-      const folder = vscode.workspace.getWorkspaceFolder(uri);
-      if (folder && !/[\\/](node_modules|\.git|build|dist|\.dart_tool)[\\/]/.test(uri.fsPath)) void this.rediscover(folder);
-    };
-    watcher.onDidCreate(relayout);
-    watcher.onDidDelete(relayout);
+    watcher.onDidCreate((u) => this.relayout(u));
+    watcher.onDidDelete((u) => this.relayout(u));
     this.disposables.push(
       watcher,
       vscode.workspace.onDidChangeConfiguration((e) => {
-        for (const f of vscode.workspace.workspaceFolders ?? []) if (e.affectsConfiguration('figbridge.manifestPath', f.uri)) void this.rediscover(f);
+        for (const f of vscode.workspace.workspaceFolders ?? []) if (e.affectsConfiguration('figbridge.manifestPath', f.uri)) this.scheduleRediscover(f);
       }),
     );
     this.updateContext();
   }
 
   private readonly folderProjects = new Map<string, string[]>();
+  private readonly relayoutTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; hints: vscode.Uri[] }>();
+  private relayoutQueue: Promise<void> = Promise.resolve();
 
-  private async add(folder: vscode.WorkspaceFolder): Promise<void> {
+  /** A manifest appeared or disappeared somewhere: the project layout of its folder may change. */
+  private relayout(uri: vscode.Uri): void {
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    if (folder && !/[\\/](node_modules|\.git|build|dist|out|\.dart_tool|\.next|Pods)[\\/]/.test(uri.fsPath)) this.scheduleRediscover(folder, uri);
+  }
+
+  /** Debounces and serialises rediscovery, so overlapping events never build duplicate projects. */
+  private scheduleRediscover(folder: vscode.WorkspaceFolder, hint?: vscode.Uri): void {
+    const key = folder.uri.toString();
+    const pending = this.relayoutTimers.get(key);
+    if (pending) clearTimeout(pending.timer);
+    const hints = [...(pending?.hints ?? []), ...(hint ? [hint] : [])];
+    const timer = setTimeout(() => {
+      this.relayoutTimers.delete(key);
+      this.relayoutQueue = this.relayoutQueue.then(() => this.rediscover(folder, hints)).catch(() => undefined);
+    }, RELAYOUT_DEBOUNCE_MS);
+    this.relayoutTimers.set(key, { timer, hints });
+  }
+
+  private async add(folder: vscode.WorkspaceFolder, hints: readonly vscode.Uri[] = []): Promise<void> {
     if (folder.uri.scheme !== 'file' || this.folderProjects.has(folder.uri.toString())) return;
     this.folderProjects.set(folder.uri.toString(), []);
     const configured = vscode.workspace.getConfiguration('figbridge', folder.uri).get<string>('manifestPath', MANIFEST_FILENAME);
     const manifests =
       configured !== MANIFEST_FILENAME
         ? [vscode.Uri.joinPath(folder.uri, configured)]
-        : await vscode.workspace.findFiles(new vscode.RelativePattern(folder, `**/${MANIFEST_FILENAME}`), DISCOVERY_EXCLUDE, 200);
+        : await this.findManifests(folder, hints);
     const roots = new Map<string, { root: vscode.Uri; name: string }>();
     for (const m of manifests) roots.set(vscode.Uri.file(dirname(m.fsPath)).toString(), { root: vscode.Uri.file(dirname(m.fsPath)), name: m.path.split('/').pop()! });
     if (!roots.has(folder.uri.toString())) roots.set(folder.uri.toString(), { root: folder.uri, name: MANIFEST_FILENAME });
@@ -88,6 +106,7 @@ export class FigBridgeWorkspace implements vscode.Disposable {
       const previews = new ProjectPreviews(project, this.client, this.context.globalStorageUri);
       this.projects.set(root.toString(), { project, previews });
       keys.push(root.toString());
+      project.onDidChangeLayout((u) => this.relayout(u));
       project.onDidChange(() => {
         this.updateContext();
         this.changed.fire();
@@ -98,10 +117,22 @@ export class FigBridgeWorkspace implements vscode.Disposable {
     await Promise.all(keys.map((k) => this.projects.get(k)!.project.start()));
   }
 
+  /**
+   * Manifests in a folder. The search index can lag behind a file that was just created or
+   * deleted, so the manifests named by watcher events are checked on disk as well.
+   */
+  private async findManifests(folder: vscode.WorkspaceFolder, hints: readonly vscode.Uri[]): Promise<vscode.Uri[]> {
+    const found = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, `**/${MANIFEST_FILENAME}`), DISCOVERY_EXCLUDE, 200);
+    const byKey = new Map(found.map((u) => [u.toString(), u]));
+    for (const h of hints) byKey.set(h.toString(), h);
+    const exists = await Promise.all([...byKey.values()].map((u) => vscode.workspace.fs.stat(u).then(() => u, () => undefined)));
+    return exists.filter((u): u is vscode.Uri => !!u);
+  }
+
   /** Re-discovers projects in a folder (a manifest was created or deleted). */
-  async rediscover(folder: vscode.WorkspaceFolder): Promise<void> {
+  async rediscover(folder: vscode.WorkspaceFolder, hints: readonly vscode.Uri[] = []): Promise<void> {
     this.remove(folder);
-    await this.add(folder);
+    await this.add(folder, hints);
     this.updateContext();
     this.changed.fire();
   }
@@ -156,6 +187,7 @@ export class FigBridgeWorkspace implements vscode.Disposable {
   }
 
   dispose(): void {
+    for (const { timer } of this.relayoutTimers.values()) clearTimeout(timer);
     for (const { project, previews } of this.projects.values()) {
       previews.dispose();
       project.dispose();
